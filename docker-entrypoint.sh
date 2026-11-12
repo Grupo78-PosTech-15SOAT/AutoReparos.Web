@@ -14,7 +14,8 @@ fi
 # Injeta a variável API_URL no env.js se configurada (mesmo se vazia para URLs relativas em produção)
 if [ "${API_URL+set}" = "set" ]; then
   echo "Setting API URL to: '$API_URL'"
-  echo "(function(window) { window.__env = window.__env || {}; window.__env.apiUrl = '$API_URL'; })(this);" > /usr/share/nginx/html/env.js
+  encoded_url="$(printf '%s' "$API_URL" | od -An -tx1 | tr -d '[:space:]' | sed 's/../%&/g')"
+  printf "(function(window) { window.__env = window.__env || {}; window.__env.apiUrl = decodeURIComponent('%s'); })(this);\n" "$encoded_url" > /usr/share/nginx/html/env.js
 fi
 
 exec "$@"
