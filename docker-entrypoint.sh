@@ -4,6 +4,11 @@
 OTEL_HOST="${OTEL_COLLECTOR_HOST:-autoreparos-otel-collector}"
 if [ -f /etc/nginx/conf.d/default.conf ]; then
   sed -i "s|http://[^:]*:4318/v1/traces|http://${OTEL_HOST}:4318/v1/traces|g" /etc/nginx/conf.d/default.conf
+  # Usa o DNS do ambiente (Docker, Kubernetes) em vez do padrão do Docker
+  DNS_HOST="$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)"
+  if [ -n "$DNS_HOST" ]; then
+    sed -i "s|resolver [^ ;]* |resolver ${DNS_HOST} |" /etc/nginx/conf.d/default.conf
+  fi
 fi
 
 # Injeta a variável API_URL no env.js se configurada (mesmo se vazia para URLs relativas em produção)
