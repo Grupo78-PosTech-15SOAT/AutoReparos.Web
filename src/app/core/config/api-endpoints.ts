@@ -2,64 +2,70 @@ import { environment } from '../../../environments/environment';
 
 export const API_BASE_URL = environment.apiUrl;
 
+const V1 = `${API_BASE_URL}/api/v1`;
+
+/** Endpoints da Surface do plano web-adaptacao: sempre `API_BASE_URL` + `/api/v1/...` (exceto o login). */
 export const API_ENDPOINTS = {
-  // 1. Autenticação & Login
   AUTH: {
     LOGIN: `${API_BASE_URL}/api/auth/login`,
   },
 
-  // 2. Ordens de Serviço & Sub-endpoints
   ORDENS_SERVICO: {
-    BASE: `${API_BASE_URL}/api/ordem-servico`,
-    FILA_KANBAN: `${API_BASE_URL}/api/ordem-servico/kanban`,
-    CONSULTA_PUBLICA: `${API_BASE_URL}/api/ordem-servico/consulta`,
-    ENVIAR_APROVACAO: (id: string) => `${API_BASE_URL}/api/ordem-servico/${id}/enviar-para-aprovacao`,
-    RESPONDER_ORCAMENTO: `${API_BASE_URL}/api/ordem-servico/aprovar`,
-    APROVAR_ORCAMENTO: (token: string) => `${API_BASE_URL}/api/ordem-servico/aprovar?token=${encodeURIComponent(token)}`,
-    RECUSAR_ORCAMENTO: (token: string) => `${API_BASE_URL}/api/ordem-servico/recusar?token=${encodeURIComponent(token)}`,
-    ENTREGAR: (id: string) => `${API_BASE_URL}/api/ordem-servico/${id}/entregar`,
-    STATUS: (id: string) => `${API_BASE_URL}/api/ordem-servico/${id}/status`,
-    DIAGNOSTICO: (id: string) => `${API_BASE_URL}/api/ordem-servico/${id}/iniciar-diagnostico`,
-    SERVICOS: (id: string) => `${API_BASE_URL}/api/ordem-servico/${id}/servicos`,
-    SERVICO_STATUS: (osId: string, itemId: string) => `${API_BASE_URL}/api/ordem-servico/${osId}/servicos/${itemId}/concluir`,
-    INSUMOS: (osId: string) => `${API_BASE_URL}/api/ordem-servico/${osId}/insumos`,
-    BY_ID: (id: string) => `${API_BASE_URL}/api/ordem-servico/${id}`
+    BASE: `${V1}/ordens-servico`,
+    BY_ID: (id: string) => `${V1}/ordens-servico/${id}`,
+    CONSULTA: (id: string) => `${V1}/ordens-servico/${id}/consulta`,
+    CANCELAMENTO: (id: string) => `${V1}/ordens-servico/${id}/cancelamento`,
   },
 
-  // 3. Gestão de Clientes
-  CLIENTES: {
-    BASE: `${API_BASE_URL}/api/clientes`,
-    BY_ID: (id: string) => `${API_BASE_URL}/api/clientes/${id}`
+  ORCAMENTOS: {
+    BASE: `${V1}/orcamentos`,
+    LINK_APROVACAO: (id: string) => `${V1}/orcamentos/${id}/link-aprovacao`,
+    PUBLICO: `${V1}/orcamentos/publico`,
+    PUBLICO_APROVACAO: `${V1}/orcamentos/publico/aprovacao`,
   },
 
-  // 4. Gestão de Veículos
-  VEICULOS: {
-    BASE: `${API_BASE_URL}/api/veiculos`,
-    BY_ID: (id: string) => `${API_BASE_URL}/api/veiculos/${id}`,
-    BY_PLACA: (placa: string) => `${API_BASE_URL}/api/veiculos/placa/${placa}`
+  PAGAMENTOS: {
+    BY_ID: (id: string) => `${V1}/pagamentos/${id}`,
+    CHECKOUT: (id: string) => `${V1}/pagamentos/${id}/checkout`,
+    REEMBOLSOS: (id: string) => `${V1}/pagamentos/${id}/reembolsos`,
   },
 
-  // 5. Gestão de Insumos / Peças
-  INSUMOS: {
-    BASE: `${API_BASE_URL}/api/insumos`,
-    BY_ID: (id: string) => `${API_BASE_URL}/api/insumos/${id}`
+  EXECUCAO: {
+    FILA: `${V1}/fila-execucao`,
+    ETAPAS: (execucaoId: string) => `${V1}/execucoes/${execucaoId}/etapas`,
+    CONCLUSAO: (execucaoId: string) => `${V1}/execucoes/${execucaoId}/conclusao`,
+    FALHA: (execucaoId: string) => `${V1}/execucoes/${execucaoId}/falha`,
+    REEXECUCAO: (execucaoId: string) => `${V1}/execucoes/${execucaoId}/reexecucao`,
   },
 
-  // 6. Catálogo de Serviços
   SERVICOS: {
-    BASE: `${API_BASE_URL}/api/servicos`,
-    BY_ID: (id: string) => `${API_BASE_URL}/api/servicos/${id}`
+    BASE: `${V1}/servicos`,
   },
 
-  // 7. Gestão de Usuários
+  INSUMOS: {
+    BASE: `${V1}/insumos`,
+    ENTRADAS: (id: string) => `${V1}/insumos/${id}/entradas`,
+  },
+
+  SAGAS: {
+    BASE: `${V1}/admin/sagas`,
+    BY_ID: (ordemServicoId: string) => `${V1}/admin/sagas/${ordemServicoId}`,
+    RETENTAR: (ordemServicoId: string) => `${V1}/admin/sagas/${ordemServicoId}/retentar`,
+  },
+
+  CLIENTES: {
+    BASE: `${V1}/clientes`,
+    BY_ID: (id: string) => `${V1}/clientes/${id}`,
+  },
+
+  VEICULOS: {
+    BASE: `${V1}/veiculos`,
+    BY_ID: (id: string) => `${V1}/veiculos/${id}`,
+  },
+
   USUARIOS: {
-    BASE: `${API_BASE_URL}/api/usuarios`,
-    BY_ID: (id: string) => `${API_BASE_URL}/api/usuarios/${id}`,
-    ROLE: (id: string) => `${API_BASE_URL}/api/usuarios/${id}/role`
+    BASE: `${V1}/usuarios`,
+    BY_ID: (id: string) => `${V1}/usuarios/${id}`,
+    ROLE: (id: string) => `${V1}/usuarios/${id}/role`,
   },
-
-  // 8. Dashboard Gerencial
-  DASHBOARD: {
-    METRICS: `${API_BASE_URL}/api/dashboard/metrics`
-  }
 };

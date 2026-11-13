@@ -13,7 +13,7 @@ import { getStatusOsInfo } from '../../../shared/utils/status-os.utils';
   `
 })
 export class StatusBadgeComponent {
-  status = input.required<number | string>();
+  status = input.required<string>();
   size = input<'sm' | 'md'>('md');
 
   badgeInfo = computed(() => getStatusOsInfo(this.status()));

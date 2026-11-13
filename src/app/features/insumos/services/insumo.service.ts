@@ -22,7 +22,7 @@ export class InsumoService {
   }
 
   getById(id: string): Observable<Insumo> {
-    return this.http.get<Insumo>(API_ENDPOINTS.INSUMOS.BY_ID(id));
+    return this.http.get<Insumo>(`${API_ENDPOINTS.INSUMOS.BASE}/${id}`);
   }
 
   criar(insumo: Insumo): Observable<Insumo> {
@@ -30,11 +30,11 @@ export class InsumoService {
   }
 
   atualizar(id: string, insumo: Insumo): Observable<Insumo> {
-    return this.http.put<Insumo>(API_ENDPOINTS.INSUMOS.BY_ID(id), insumo);
+    return this.http.put<Insumo>(`${API_ENDPOINTS.INSUMOS.BASE}/${id}`, insumo);
   }
 
   excluir(id: string): Observable<void> {
-    return this.http.delete<void>(API_ENDPOINTS.INSUMOS.BY_ID(id));
+    return this.http.delete<void>(`${API_ENDPOINTS.INSUMOS.BASE}/${id}`);
   }
 
   private normalizePagedResult(res: any, pageNumber: number, pageSize: number): PagedResult<Insumo> {

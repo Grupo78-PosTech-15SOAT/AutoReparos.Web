@@ -3,15 +3,22 @@ export interface StatusOsInfo {
   cssClass: string;
 }
 
-export const STATUS_OS_MAP: Record<number, StatusOsInfo> = {
-  1: { label: 'Recebida',             cssClass: 'status-recebida'    },
-  2: { label: 'Em Diagnóstico',       cssClass: 'status-diagnostico' },
-  3: { label: 'Aguardando Aprovação', cssClass: 'status-aguardando'  },
-  4: { label: 'Em Execução',          cssClass: 'status-execucao'    },
-  5: { label: 'Finalizada',           cssClass: 'status-finalizada'  },
-  6: { label: 'Entregue',             cssClass: 'status-entregue'    },
-};
+/** Única tabela de status da OS no Web: espelha os status reais da Saga do serviço OS. */
+export const STATUS_OS_MAP = {
+  Recebida: { label: 'Recebida', cssClass: 'status-recebida' },
+  OrcamentoAprovado: { label: 'Orçamento Aprovado', cssClass: 'status-aguardando' },
+  EmExecucao: { label: 'Em Execução', cssClass: 'status-execucao' },
+  Concluida: { label: 'Concluída', cssClass: 'status-finalizada' },
+  Paga: { label: 'Paga', cssClass: 'status-entregue' },
+  IntervencaoRequerida: { label: 'Intervenção Requerida', cssClass: 'status-diagnostico' },
+  Cancelada: { label: 'Cancelada', cssClass: 'status-entregue' },
+} as const satisfies Record<string, StatusOsInfo>;
 
-export function getStatusOsInfo(status: number | string): StatusOsInfo {
-  return STATUS_OS_MAP[Number(status)] ?? { label: 'Desconhecido', cssClass: 'status-entregue' };
+export type StatusOS = keyof typeof STATUS_OS_MAP;
+
+/** Os 7 status reais da OS, na ordem das colunas do Kanban. */
+export const STATUS_OS = Object.keys(STATUS_OS_MAP) as StatusOS[];
+
+export function getStatusOsInfo(status: string): StatusOsInfo {
+  return (STATUS_OS_MAP as Record<string, StatusOsInfo>)[status] ?? { label: status || 'Desconhecido', cssClass: 'status-entregue' };
 }

@@ -22,7 +22,7 @@ export class ServicoService {
   }
 
   getById(id: string): Observable<Servico> {
-    return this.http.get<Servico>(API_ENDPOINTS.SERVICOS.BY_ID(id));
+    return this.http.get<Servico>(`${API_ENDPOINTS.SERVICOS.BASE}/${id}`);
   }
 
   criar(servico: Servico): Observable<Servico> {
@@ -30,11 +30,11 @@ export class ServicoService {
   }
 
   atualizar(id: string, servico: Servico): Observable<Servico> {
-    return this.http.put<Servico>(API_ENDPOINTS.SERVICOS.BY_ID(id), servico);
+    return this.http.put<Servico>(`${API_ENDPOINTS.SERVICOS.BASE}/${id}`, servico);
   }
 
   excluir(id: string): Observable<void> {
-    return this.http.delete<void>(API_ENDPOINTS.SERVICOS.BY_ID(id));
+    return this.http.delete<void>(`${API_ENDPOINTS.SERVICOS.BASE}/${id}`);
   }
 
   private normalizePagedResult(res: any, pageNumber: number, pageSize: number): PagedResult<Servico> {

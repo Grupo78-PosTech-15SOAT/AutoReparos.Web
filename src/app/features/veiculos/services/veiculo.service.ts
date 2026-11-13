@@ -25,10 +25,6 @@ export class VeiculoService {
     return this.http.get<Veiculo>(API_ENDPOINTS.VEICULOS.BY_ID(id));
   }
 
-  buscarPorPlaca(placa: string): Observable<Veiculo> {
-    return this.http.get<Veiculo>(API_ENDPOINTS.VEICULOS.BY_PLACA(placa));
-  }
-
   criar(veiculo: Veiculo): Observable<Veiculo> {
     return this.http.post<Veiculo>(API_ENDPOINTS.VEICULOS.BASE, veiculo);
   }
