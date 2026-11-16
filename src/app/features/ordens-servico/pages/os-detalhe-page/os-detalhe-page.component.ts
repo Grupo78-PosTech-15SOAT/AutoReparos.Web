@@ -1,22 +1,45 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DatePipe, DecimalPipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
 import { AuthService } from '../../../auth/services/auth.service';
-import { ExecucaoResumo, OrcamentoResumo, OsDetalhe } from '../../models/ordem-servico.model';
+import { ExecucaoResumo, OsDetalhe } from '../../models/ordem-servico.model';
 import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
 import { OsCancelamentoComponent } from '../../components/os-cancelamento/os-cancelamento.component';
 
-type Carga<T> = { estado: 'carregando' } | { estado: 'restrito' } | { estado: 'erro' } | { estado: 'vazio' } | { estado: 'ok'; dado: T };
+type Carga<T> =
+  | { estado: 'carregando' }
+  | { estado: 'restrito' }
+  | { estado: 'erro' }
+  | { estado: 'vazio' }
+  | { estado: 'ok'; dado: T };
 
 @Component({
   selector: 'app-os-detalhe-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, DecimalPipe, RouterLink, StatusBadgeComponent, PageContainerComponent, IdBadgeComponent, OsCancelamentoComponent],
+  imports: [
+    DatePipe,
+    FormsModule,
+    RouterLink,
+    StatusBadgeComponent,
+    PageContainerComponent,
+    IdBadgeComponent,
+    OsCancelamentoComponent,
+  ],
   template: `
     <app-page-container>
       @if (carregando()) {
@@ -29,7 +52,9 @@ type Carga<T> = { estado: 'carregando' } | { estado: 'restrito' } | { estado: 'e
               <app-status-badge [status]="os.status"></app-status-badge>
             </div>
             <h1 class="page-title">Ordem de Serviço</h1>
-            <p class="page-subtitle">Cliente {{ os.clienteId.substring(0, 8) }} | Veículo {{ os.veiculoId.substring(0, 8) }}</p>
+            <p class="page-subtitle">
+              Cliente {{ os.clienteId.substring(0, 8) }} | Veículo {{ os.veiculoId.substring(0, 8) }}
+            </p>
             @if (os.observacao) {
               <p class="page-subtitle">Observação: {{ os.observacao }}</p>
             }
@@ -38,13 +63,39 @@ type Carga<T> = { estado: 'carregando' } | { estado: 'restrito' } | { estado: 'e
         </div>
 
         <div class="grade">
+          <section class="card-panel" aria-label="Observação">
+            <h3 class="secao">Observação</h3>
+            <form (ngSubmit)="salvarObservacao()" class="form-obs">
+              <label class="form-label" for="observacao-detalhe">Observação da OS</label>
+              <textarea
+                id="observacao-detalhe"
+                class="form-control"
+                rows="3"
+                [(ngModel)]="observacaoEditada"
+                name="observacao"
+                [disabled]="salvandoObservacao()"
+                placeholder="Informe observações sobre a OS..."
+              ></textarea>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                [disabled]="salvandoObservacao()"
+              >
+                {{ salvandoObservacao() ? 'Salvando...' : 'Salvar observação' }}
+              </button>
+              @if (observacaoSalva()) {
+                <p class="aviso-ok" role="status">Observação salva com sucesso.</p>
+              }
+            </form>
+          </section>
+
           <section class="card-panel" aria-label="Histórico">
             <h3 class="secao">Histórico</h3>
             <ul class="lista">
               @for (h of os.historico; track $index) {
                 <li class="linha">
                   <app-status-badge [status]="h.status" size="sm"></app-status-badge>
-                  <span class="data">{{ h.em | date:'dd/MM/yyyy HH:mm' }}</span>
+                  <span class="data">{{ h.em | date: 'dd/MM/yyyy HH:mm' }}</span>
                 </li>
               } @empty {
                 <li class="linha">Sem movimentações registradas.</li>
@@ -52,42 +103,53 @@ type Carga<T> = { estado: 'carregando' } | { estado: 'restrito' } | { estado: 'e
             </ul>
           </section>
 
-          <section class="card-panel" aria-label="Orçamento">
-            <h3 class="secao">Orçamento</h3>
-            @switch (orcamento().estado) {
-              @case ('carregando') { <p class="aviso">Carregando orçamento...</p> }
-              @case ('restrito') { <p class="aviso">Indisponível para o seu perfil.</p> }
-              @case ('erro') { <p class="aviso">Não foi possível carregar o orçamento.</p> }
-              @case ('vazio') { <p class="aviso">Sem orçamento para esta OS.</p> }
-              @case ('ok') {
-                @if (orcamentoOk(); as o) {
-                  <div class="linha"><span>Status</span><strong>{{ o.status }}</strong></div>
-                  <div class="linha"><span>Valor</span><strong>R$ {{ o.valor | number:'1.2-2' }}</strong></div>
-                  <ul class="lista">
-                    @for (item of o.itens; track $index) {
-                      <li class="linha">
-                        <span>{{ item.nome ?? item.descricao }} x{{ item.quantidade }}</span>
-                        <span>R$ {{ item.precoUnitario | number:'1.2-2' }}</span>
-                      </li>
-                    }
-                  </ul>
-                }
-              }
-            }
+          <section class="card-panel" aria-label="Orçamento e Pagamento">
+            <h3 class="secao">Orçamento e Pagamento</h3>
+            <p class="aviso">Monte o orçamento ou acesse o checkout de pagamento desta OS.</p>
+            <div class="acoes-fluxo">
+              <a
+                routerLink="/orcamentos/novo"
+                [queryParams]="{ ordemServicoId: os.id, clienteId: os.clienteId }"
+                class="btn btn-primary"
+              >
+                Montar orçamento
+              </a>
+              <a
+                routerLink="/pagamentos"
+                [queryParams]="{ ordemServicoId: os.id }"
+                class="btn btn-secondary"
+              >
+                Abrir pagamento
+              </a>
+            </div>
           </section>
 
           <section class="card-panel" aria-label="Execução">
             <h3 class="secao">Execução</h3>
             @switch (execucao().estado) {
-              @case ('carregando') { <p class="aviso">Carregando execução...</p> }
-              @case ('restrito') { <p class="aviso">Indisponível para o seu perfil.</p> }
-              @case ('erro') { <p class="aviso">Não foi possível carregar a execução.</p> }
-              @case ('vazio') { <p class="aviso">Sem execução para esta OS.</p> }
+              @case ('carregando') {
+                <p class="aviso">Carregando execução...</p>
+              }
+              @case ('restrito') {
+                <p class="aviso">Indisponível para o seu perfil.</p>
+              }
+              @case ('erro') {
+                <p class="aviso">Não foi possível carregar a execução.</p>
+              }
+              @case ('vazio') {
+                <p class="aviso">Sem execução para esta OS.</p>
+              }
               @case ('ok') {
                 @if (execucaoOk(); as e) {
-                  <div class="linha"><span>Estado</span><strong>{{ e.status }}</strong></div>
+                  <div class="linha">
+                    <span>Estado</span>
+                    <strong>{{ e.status }}</strong>
+                  </div>
                   @if (e.mecanicoId) {
-                    <div class="linha"><span>Mecânico</span><strong>{{ e.mecanicoId.substring(0, 8) }}</strong></div>
+                    <div class="linha">
+                      <span>Mecânico</span>
+                      <strong>{{ e.mecanicoId.substring(0, 8) }}</strong>
+                    </div>
                   }
                 }
               }
@@ -103,70 +165,156 @@ type Carga<T> = { estado: 'carregando' } | { estado: 'restrito' } | { estado: 'e
       }
     </app-page-container>
   `,
-  styles: [`
-    .cabecalho { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.3rem; }
-    .grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
-    .secao { font-family: 'Outfit', sans-serif; font-size: 1.05rem; color: #ED145B; margin-bottom: 0.75rem; }
-    .lista { list-style: none; margin: 0; padding: 0; }
-    .linha { display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
-    .data { color: #A1A1AA; font-size: 0.85rem; }
-    .aviso { color: #A1A1AA; padding: 0.5rem 0; }
-  `]
+  styles: [
+    `
+      .cabecalho {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        margin-bottom: 0.3rem;
+      }
+      .grade {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.25rem;
+      }
+      .secao {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.05rem;
+        color: #ed145b;
+        margin-bottom: 0.75rem;
+      }
+      .form-obs {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .acoes-fluxo {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 0.75rem;
+      }
+      .lista {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .linha {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.45rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .data {
+        color: #a1a1aa;
+        font-size: 0.85rem;
+      }
+      .aviso {
+        color: #a1a1aa;
+        padding: 0.5rem 0;
+      }
+      .aviso-ok {
+        color: #10b981;
+        font-size: 0.85rem;
+        margin: 0;
+      }
+    `,
+  ],
 })
 export class OsDetalhePageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly osService = inject(OrdemServicoService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute, { optional: true });
 
-  /** Id da OS, ligado ao parâmetro `:id` da rota (withComponentInputBinding). */
-  readonly id = input.required<string>();
+  /** Id da OS, ligado ao parâmetro `:id` da rota (withComponentInputBinding ou ActivatedRoute). */
+  readonly id = input<string>('');
 
   readonly os = signal<OsDetalhe | null>(null);
   readonly carregando = signal(true);
-  readonly orcamento = signal<Carga<OrcamentoResumo>>({ estado: 'carregando' });
   readonly execucao = signal<Carga<ExecucaoResumo>>({ estado: 'carregando' });
 
-  readonly orcamentoOk = computed(() => this.dadoOk(this.orcamento()));
+  observacaoEditada = '';
+  readonly salvandoObservacao = signal(false);
+  readonly observacaoSalva = signal(false);
+
   readonly execucaoOk = computed(() => this.dadoOk(this.execucao()));
 
   podeCancelar(): boolean {
-    return this.auth.hasRole(['Administrador', 'Atendente']);
+    const user = this.auth.currentUser();
+    return !user || this.auth.hasRole(['Administrador', 'Atendente']);
   }
 
   ngOnInit() {
     this.carregar();
   }
 
-  carregar() {
-    const id = this.id();
-    this.osService.obter(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: os => {
-        this.os.set(os);
-        this.carregando.set(false);
-      },
-      error: () => {
-        this.os.set(null);
-        this.carregando.set(false);
-      }
-    });
+  private resolverId(): string {
+    return this.id() || this.route?.snapshot?.paramMap?.get('id') || '';
+  }
 
-    if (this.auth.hasRole(['Administrador', 'Atendente'])) {
-      this.osService.obterOrcamento(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: o => this.orcamento.set(o ? { estado: 'ok', dado: o } : { estado: 'vazio' }),
-        error: () => this.orcamento.set({ estado: 'erro' })
-      });
-    } else {
-      this.orcamento.set({ estado: 'restrito' });
+  carregar() {
+    const id = this.resolverId();
+    if (!id) {
+      this.carregando.set(false);
+      return;
     }
 
-    if (this.auth.hasRole(['Administrador', 'Mecanico'])) {
-      this.osService.obterExecucao(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: e => this.execucao.set(e ? { estado: 'ok', dado: e } : { estado: 'vazio' }),
-        error: () => this.execucao.set({ estado: 'erro' })
+    this.osService
+      .obter(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: os => {
+          this.os.set(os);
+          this.observacaoEditada = os.observacao ?? '';
+          this.carregando.set(false);
+        },
+        error: () => {
+          this.os.set(null);
+          this.carregando.set(false);
+        },
       });
+
+    const user = this.auth.currentUser();
+    if (!user || this.auth.hasRole(['Administrador', 'Mecanico'])) {
+      this.osService
+        .obterExecucao(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: e => this.execucao.set(e ? { estado: 'ok', dado: e } : { estado: 'vazio' }),
+          error: err =>
+            this.execucao.set(err?.status === 403 ? { estado: 'restrito' } : { estado: 'erro' }),
+        });
     } else {
       this.execucao.set({ estado: 'restrito' });
     }
+  }
+
+  salvarObservacao() {
+    const atual = this.os();
+    if (!atual) return;
+
+    this.salvandoObservacao.set(true);
+    this.observacaoSalva.set(false);
+    const novaObservacao = this.observacaoEditada.trim() || null;
+
+    this.osService
+      .atualizarObservacao(atual.id, novaObservacao)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: res => {
+          const obsAtualizada = res?.observacao ?? novaObservacao ?? undefined;
+          this.os.set({ ...atual, observacao: obsAtualizada });
+          this.observacaoEditada = obsAtualizada ?? '';
+          this.salvandoObservacao.set(false);
+          this.observacaoSalva.set(true);
+        },
+        error: () => {
+          this.salvandoObservacao.set(false);
+        },
+      });
   }
 
   private dadoOk<T>(carga: Carga<T>): T | null {

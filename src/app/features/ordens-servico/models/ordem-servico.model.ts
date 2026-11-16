@@ -4,42 +4,27 @@ export type { StatusOS };
 
 export interface OsResumo {
   id: string;
-  clienteId: string;
-  veiculoId: string;
+  clienteId?: string;
+  veiculoId?: string;
+  observacao?: string;
   status: StatusOS;
-  atualizadaEm: string;
-}
-
-/** Resposta de `GET /ordens-servico?status=&pagina=&tamanho=`. */
-export interface OsPagina {
-  total: number;
-  itens: OsResumo[];
-}
-
-export interface FiltroOs {
-  status?: StatusOS;
-  pagina?: number;
-  tamanho?: number;
+  atualizadaEm?: string;
 }
 
 export interface HistoricoStatus {
+  id?: string;
+  ordemServicoId?: string;
   status: string;
-  em: string;
+  em?: string;
+  registradoEm?: string;
 }
 
-/** Resposta de `GET /ordens-servico/{id}`. */
+/** Resposta de `GET /api/v1/ordens-servico/{id}`. */
 export interface OsDetalhe {
   id: string;
   clienteId: string;
   veiculoId: string;
   observacao?: string;
-  status: StatusOS;
-  historico: HistoricoStatus[];
-}
-
-/** Resposta pública de `GET /ordens-servico/{id}/consulta` (sem cliente nem veículo). */
-export interface OsConsulta {
-  id: string;
   status: StatusOS;
   historico: HistoricoStatus[];
 }
@@ -51,31 +36,44 @@ export interface CriarOSRequest {
 }
 
 export interface CancelamentoResposta {
+  ordemServicoId?: string;
+  correlacaoId?: string;
   status?: string;
   estado?: string;
 }
 
-export interface OrcamentoItemResumo {
-  nome?: string;
-  descricao?: string;
-  tipo?: string;
-  quantidade: number;
-  precoUnitario: number;
-}
-
-/** Resposta de `GET /orcamentos?ordemServicoId=`. */
-export interface OrcamentoResumo {
-  id: string;
-  valor: number;
-  status: string;
-  pagamentoId?: string;
-  itens: OrcamentoItemResumo[];
-}
-
-/** Item da fila de execução vinculado à OS. */
+/** Item da fila de execução vinculado à OS (`GET /api/v1/fila-execucao`). */
 export interface ExecucaoResumo {
   id: string;
   ordemServicoId?: string;
+  clienteId?: string;
+  veiculoId?: string;
   status: string;
+  intervencaoRequerida?: boolean;
   mecanicoId?: string;
+  atualizadaEm?: string;
+}
+
+/** Resumo de Saga retornado por `GET /api/v1/admin/sagas`. */
+export interface SagaAdminResumo {
+  ordemServicoId: string;
+  estado: string;
+  atualizadoEm?: string;
+  orcamentoId?: string;
+}
+
+export interface KanbanCard {
+  id: string;
+  status: StatusOS;
+  clienteId?: string;
+  veiculoId?: string;
+  observacao?: string;
+  atualizadaEm?: string;
+  origem?: 'os' | 'execucao' | 'saga';
+}
+
+export interface KanbanColumn {
+  status: StatusOS;
+  label: string;
+  cards: KanbanCard[];
 }

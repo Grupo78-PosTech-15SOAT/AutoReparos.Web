@@ -40,9 +40,9 @@ import { AuthService } from '../../../auth/services/auth.service';
                    Quadro Kanban
                  </a>
                  @if (auth.hasRole(['Administrador'])) {
-                   <a routerLink="/dashboard" class="btn btn-secondary btn-md">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                     Dashboard Gerencial
+                   <a routerLink="/sagas" class="btn btn-secondary btn-md">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                     Console de Sagas
                    </a>
                  }
                </div>
@@ -97,11 +97,11 @@ import { AuthService } from '../../../auth/services/auth.service';
                <h3 class="module-title">Aprovação de Orçamento</h3>
              </div>
              <a routerLink="/aprovar-orcamento" class="module-link">
-               <span>Simular Aprovação por Token</span>
+               <span>Aprovar Orçamento</span>
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
              </a>
            </div>
- 
+
            <!-- Card 3: Fila Kanban -->
            <div class="module-card">
              <div class="card-top-line orange-line"></div>
@@ -116,7 +116,7 @@ import { AuthService } from '../../../auth/services/auth.service';
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
              </a>
            </div>
- 
+
            <!-- Card 4: Clientes e Veículos -->
            <div class="module-card">
              <div class="card-top-line pink-line"></div>
@@ -131,9 +131,9 @@ import { AuthService } from '../../../auth/services/auth.service';
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
              </a>
            </div>
- 
+
            <!-- Card 5: Estoque e Insumos -->
-           @if (auth.hasRole(['Administrador', 'Mecanico'])) {
+           @if (auth.hasRole(['Administrador', 'Atendente', 'Mecanico'])) {
              <div class="module-card">
                <div class="card-top-line emerald-line"></div>
                <div class="card-header">
@@ -148,19 +148,19 @@ import { AuthService } from '../../../auth/services/auth.service';
                </a>
              </div>
            }
- 
-           <!-- Card 6: Dashboard -->
+
+           <!-- Card 6: Console de Sagas -->
            @if (auth.hasRole(['Administrador'])) {
              <div class="module-card">
                <div class="card-top-line cyan-line"></div>
                <div class="card-header">
                  <div class="card-icon icon-cyan">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                  </div>
-                 <h3 class="module-title">Dashboard e Métricas</h3>
+                 <h3 class="module-title">Console de Sagas</h3>
                </div>
-               <a routerLink="/dashboard" class="module-link">
-                 <span>Visualizar Métricas</span>
+               <a routerLink="/sagas" class="module-link">
+                 <span>Operar Sagas</span>
                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                </a>
              </div>

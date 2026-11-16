@@ -46,7 +46,7 @@ describe('ErrorInterceptor', () => {
 
   afterEach(() => controller.verify());
 
-  function falhar(status: number, corpo: unknown, url = API_ENDPOINTS.ORDENS_SERVICO.BASE) {
+  function falhar(status: number, corpo: Record<string, unknown> | null, url = API_ENDPOINTS.ORDENS_SERVICO.BASE) {
     http.get(url).subscribe({ error: () => undefined });
     controller.expectOne(url).flush(corpo, { status, statusText: 'x' });
   }

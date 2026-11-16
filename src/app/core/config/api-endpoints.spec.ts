@@ -6,13 +6,9 @@ const ID = '11111111-1111-1111-1111-111111111111';
 const ENDPOINTS: [string, string][] = [
   ['ORDENS_SERVICO.BASE', API_ENDPOINTS.ORDENS_SERVICO.BASE],
   ['ORDENS_SERVICO.BY_ID', API_ENDPOINTS.ORDENS_SERVICO.BY_ID(ID)],
-  ['ORDENS_SERVICO.CONSULTA', API_ENDPOINTS.ORDENS_SERVICO.CONSULTA(ID)],
   ['ORDENS_SERVICO.CANCELAMENTO', API_ENDPOINTS.ORDENS_SERVICO.CANCELAMENTO(ID)],
   ['ORCAMENTOS.BASE', API_ENDPOINTS.ORCAMENTOS.BASE],
-  ['ORCAMENTOS.LINK_APROVACAO', API_ENDPOINTS.ORCAMENTOS.LINK_APROVACAO(ID)],
-  ['ORCAMENTOS.PUBLICO', API_ENDPOINTS.ORCAMENTOS.PUBLICO],
-  ['ORCAMENTOS.PUBLICO_APROVACAO', API_ENDPOINTS.ORCAMENTOS.PUBLICO_APROVACAO],
-  ['PAGAMENTOS.BY_ID', API_ENDPOINTS.PAGAMENTOS.BY_ID(ID)],
+  ['ORCAMENTOS.APROVACAO', API_ENDPOINTS.ORCAMENTOS.APROVACAO(ID)],
   ['PAGAMENTOS.CHECKOUT', API_ENDPOINTS.PAGAMENTOS.CHECKOUT(ID)],
   ['PAGAMENTOS.REEMBOLSOS', API_ENDPOINTS.PAGAMENTOS.REEMBOLSOS(ID)],
   ['EXECUCAO.FILA', API_ENDPOINTS.EXECUCAO.FILA],
@@ -46,11 +42,14 @@ describe('ApiEndpoints', () => {
     expect(semBase).not.toMatch(/localhost|:\d{4}/);
   });
 
-  it('o login é POST /api/auth/login sob API_URL', () => {
+  it('o login do operador é POST /api/auth/login e o do cliente é POST /auth/cliente sob API_URL', () => {
     expect(API_ENDPOINTS.AUTH.LOGIN).toBe(`${API_BASE_URL}/api/auth/login`);
+    expect(API_ENDPOINTS.AUTH.CLIENTE).toBe(`${API_BASE_URL}/auth/cliente`);
   });
 
-  it('não contém grupos do legado (dashboard)', () => {
+  it('não contém grupos ou rotas removidas (dashboard, entregar, status manual)', () => {
     expect(Object.keys(API_ENDPOINTS)).not.toContain('DASHBOARD');
+    expect(Object.keys(API_ENDPOINTS.ORDENS_SERVICO)).not.toContain('ENTREGAR');
+    expect(Object.keys(API_ENDPOINTS.ORDENS_SERVICO)).not.toContain('STATUS');
   });
 });

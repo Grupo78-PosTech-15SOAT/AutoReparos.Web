@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrdemServicoService } from '../../../ordens-servico/services/ordem-servico.service';
-import { OsConsulta } from '../../../ordens-servico/models/ordem-servico.model';
+import { OsDetalhe } from '../../../ordens-servico/models/ordem-servico.model';
 import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
@@ -53,7 +53,7 @@ import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badg
             @for (h of consulta.historico; track $index) {
               <li class="historico-item">
                 <app-status-badge [status]="h.status" size="sm"></app-status-badge>
-                <span class="historico-data">{{ h.em | date:'dd/MM/yyyy HH:mm' }}</span>
+                <span class="historico-data">{{ h.em | date: 'dd/MM/yyyy HH:mm' }}</span>
               </li>
             } @empty {
               <li class="historico-item">Sem movimentações registradas.</li>
@@ -96,7 +96,7 @@ import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badg
     .historico-data { color: #A1A1AA; font-size: 0.85rem; }
     .empty-card { text-align: center; padding: 2.5rem; color: #A1A1AA; }
     .empty-title { font-family: 'Outfit', sans-serif; color: #fff; }
-  `]
+  `],
 })
 export class ConsultaPublicaPageComponent {
   private readonly destroyRef = inject(DestroyRef);
@@ -105,7 +105,7 @@ export class ConsultaPublicaPageComponent {
   codigo = '';
   readonly carregando = signal(false);
   readonly naoEncontrada = signal(false);
-  readonly os = signal<OsConsulta | null>(null);
+  readonly os = signal<OsDetalhe | null>(null);
 
   consultar() {
     const codigo = this.codigo.trim();
@@ -114,7 +114,7 @@ export class ConsultaPublicaPageComponent {
     this.carregando.set(true);
     this.naoEncontrada.set(false);
     this.os.set(null);
-    this.osService.consultar(codigo).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.osService.obter(codigo).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: res => {
         this.os.set(res);
         this.carregando.set(false);
@@ -122,7 +122,7 @@ export class ConsultaPublicaPageComponent {
       error: () => {
         this.naoEncontrada.set(true);
         this.carregando.set(false);
-      }
+      },
     });
   }
 }

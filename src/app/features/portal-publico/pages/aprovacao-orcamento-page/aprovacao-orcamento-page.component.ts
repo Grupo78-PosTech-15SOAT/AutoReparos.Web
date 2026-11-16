@@ -1,68 +1,107 @@
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {  Component, OnInit, inject, ChangeDetectionStrategy , DestroyRef } from '@angular/core';
+import { HttpClient, HttpContext, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { OrdemServicoService } from '../../../ordens-servico/services/ordem-servico.service';
-import { NotificationService } from '../../../../core/ui/notification.service';
+import { switchMap } from 'rxjs';
+import { API_ENDPOINTS } from '../../../../core/config/api-endpoints';
+import { MENSAGENS_POR_STATUS, mensagemDoCodigo, resolverMensagemErro } from '../../../../core/http/error-catalog';
+import { STATUS_TRATADOS_NA_TELA } from '../../../../core/http/http-context';
+
+export interface AuthClienteResponse {
+  token?: string;
+  accessToken?: string;
+}
+
+export interface AprovacaoOrcamentoResponse {
+  id?: string;
+  orcamentoId?: string;
+  status?: string;
+  pagamentoId?: string;
+}
 
 @Component({
   selector: 'app-aprovacao-orcamento-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ FormsModule],
+  imports: [FormsModule],
   template: `
     <div class="container fade-in" style="max-width: 650px; padding-top: 3rem;">
       <div class="approval-card">
         <div class="brand-header">
-          <div class="brand-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/>
-            </svg>
-          </div>
           <h1 class="card-title">Aprovação de Orçamento</h1>
-          <p class="card-subtitle">Confirme ou recuse o orçamento abaixo.</p>
+          <p class="card-subtitle">Informe o código do orçamento, seu CPF e e-mail para aprovar.</p>
         </div>
 
-        @if (!respondido) {
-          <div class="token-info-box">
-            <label class="form-label" for="input-token">Token Assinado de Aprovação:</label>
-            <div class="token-input-wrapper">
-              <textarea
-                id="input-token"
-                [(ngModel)]="token"
-                rows="3"
-                placeholder="Cole ou digite aqui o Token de aprovação..."
-                class="form-control token-textarea"
-              ></textarea>
+        @if (!aprovacao(); as _) {
+          <form (ngSubmit)="aprovar()" class="form-aprovacao">
+            <div class="form-group">
+              <label class="form-label" for="input-orcamento-id">Código do Orçamento</label>
+              <input
+                id="input-orcamento-id"
+                type="text"
+                [(ngModel)]="orcamentoId"
+                name="orcamentoId"
+                required
+                class="form-control"
+                placeholder="UUID do orçamento"
+              />
             </div>
-          </div>
 
-          <!-- Botões de Decisão -->
-          <div class="decision-buttons">
-            <button (click)="responder(false)" [disabled]="loading || !token.trim()" class="btn btn-danger btn-lg" style="flex: 1;">
-              ✕ Recusar Orçamento
-            </button>
-            <button (click)="responder(true)" [disabled]="loading || !token.trim()" class="btn btn-success btn-lg" style="flex: 1.5;">
-              ✓ Aprovar Orçamento
-            </button>
-          </div>
-        } @else {
-          <div class="success-box fade-in">
-            <div class="check-circle" [style.background]="aprovado ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'">
-              <span [style.color]="aprovado ? '#10B981' : '#EF4444'" style="font-size: 2.5rem; font-weight: 800;">
-                {{ aprovado ? '✓' : '✕' }}
-              </span>
+            <div class="form-group">
+              <label class="form-label" for="input-cpf">CPF</label>
+              <input
+                id="input-cpf"
+                type="text"
+                [(ngModel)]="cpf"
+                name="cpf"
+                required
+                class="form-control"
+                placeholder="000.000.000-00"
+              />
             </div>
-            <h2 style="font-family: 'Outfit', sans-serif; color: #fff; margin-top: 1rem;">
-              {{ aprovado ? 'Orçamento Aprovado!' : 'Orçamento Recusado' }}
-            </h2>
-            <p style="color: #A1A1AA; font-size: 0.95rem; margin-top: 0.5rem;">
-              {{ aprovado ? 'Sua aprovação foi registrada.' : 'Sua recusa foi registrada.' }}
-            </p>
-            <button (click)="resetar()" class="btn btn-secondary btn-sm" style="margin-top: 1.5rem;">
-              🔄 Testar outro Token
-            </button>
-          </div>
+
+            <div class="form-group">
+              <label class="form-label" for="input-email">E-mail</label>
+              <input
+                id="input-email"
+                type="email"
+                [(ngModel)]="email"
+                name="email"
+                required
+                class="form-control"
+                placeholder="cliente@exemplo.com"
+              />
+            </div>
+
+            @if (erro(); as mensagemErro) {
+              <p class="erro-msg" role="alert" data-testid="erro-aprovacao">{{ mensagemErro }}</p>
+            }
+
+            <div class="decision-buttons">
+              <button
+                type="submit"
+                data-testid="btn-aprovar-orcamento"
+                [disabled]="enviando() || !orcamentoId.trim() || !cpf.trim() || !email.trim()"
+                class="btn btn-success btn-lg"
+                style="width: 100%;"
+              >
+                {{ enviando() ? 'Aprovando...' : '✓ Aprovar Orçamento' }}
+              </button>
+            </div>
+          </form>
+        } @else {
+          @if (aprovacao(); as resultado) {
+            <div class="success-box fade-in" role="status" data-testid="confirmacao-aprovacao">
+              <h2>Orçamento Aprovado!</h2>
+              <p>Sua aprovação foi registrada com sucesso.</p>
+              @if (resultado.pagamentoId) {
+                <p data-testid="pagamento-id">
+                  Pagamento gerado: <strong>{{ resultado.pagamentoId }}</strong>
+                </p>
+              }
+            </div>
+          }
         }
       </div>
     </div>
@@ -73,95 +112,73 @@ import { NotificationService } from '../../../../core/ui/notification.service';
       backdrop-filter: blur(16px);
       border: 1px solid rgba(237, 20, 91, 0.3);
       border-radius: 16px;
-      padding: 3rem 2.5rem;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+      padding: 2.5rem;
     }
-    .brand-header { text-align: center; margin-bottom: 2rem; }
-    .brand-icon {
-      width: 52px; height: 52px;
-      background: linear-gradient(135deg, #ED145B, #800A30);
-      border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      color: #ffffff; margin: 0 auto 1rem;
-      box-shadow: 0 0 25px rgba(237, 20, 91, 0.4);
-    }
-    .brand-icon svg { width: 28px; height: 28px; }
+    .brand-header { text-align: center; margin-bottom: 1.75rem; }
     .card-title { font-family: 'Outfit', sans-serif; font-size: 1.75rem; font-weight: 800; color: #ffffff; }
     .card-subtitle { font-size: 0.875rem; color: #A1A1AA; margin-top: 0.25rem; }
-
-    .token-info-box {
-      background: rgba(10, 10, 12, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      padding: 1.25rem;
-      margin-bottom: 2rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .token-textarea {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.85rem;
-      color: #ED145B;
-      background: rgba(15, 15, 18, 0.9);
-      border: 1px solid rgba(237, 20, 91, 0.3);
-      border-radius: 8px;
-      resize: vertical;
-      word-break: break-all;
-      white-space: pre-wrap;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
-    }
-    .token-textarea:focus {
-      border-color: #ED145B;
-      box-shadow: 0 0 12px rgba(237, 20, 91, 0.3);
-    }
-    .token-hint { font-size: 0.8rem; color: #71717A; line-height: 1.4; }
-
-    .decision-buttons { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .form-aprovacao { display: flex; flex-direction: column; gap: 1rem; }
+    .decision-buttons { display: flex; gap: 1rem; margin-top: 0.5rem; }
     .btn-lg { padding: 0.85rem 1.25rem; font-size: 0.95rem; }
-
-    .success-box { text-align: center; padding: 2rem 1rem; }
-    .check-circle { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+    .erro-msg { color: #F87171; font-size: 0.9rem; margin: 0; }
+    .success-box { text-align: center; padding: 1.5rem 1rem; color: #F8FAFC; }
   `]
 })
 export class AprovacaoOrcamentoPageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
-  token = '';
-  loading = false;
-  respondido = false;
-  aprovado = false;
-
+  private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
-  private readonly osService = inject(OrdemServicoService);
-  private readonly notification = inject(NotificationService);
 
-  ngOnInit() {
-    this.token = this.route.snapshot.queryParamMap.get('token') || '';
+  orcamentoId = '';
+  cpf = '';
+  email = '';
+
+  readonly enviando = signal(false);
+  readonly erro = signal<string | null>(null);
+  readonly aprovacao = signal<AprovacaoOrcamentoResponse | null>(null);
+
+  ngOnInit(): void {
+    const q = this.route.snapshot?.queryParamMap;
+    this.orcamentoId = q?.get('orcamentoId') || q?.get('id') || '';
+    this.cpf = q?.get('cpf') || '';
+    this.email = q?.get('email') || '';
   }
 
-  responder(aprovado: boolean) {
-    if (!this.token.trim()) {
-      this.notification.error('Token Obrigatório', 'Por favor, informe ou cole o token de aprovação.');
-      return;
-    }
+  aprovar(): void {
+    const id = this.orcamentoId.trim();
+    const cpf = this.cpf.trim();
+    const email = this.email.trim();
+    if (!id || !cpf || !email) return;
 
-    this.loading = true;
-    this.osService.responderOrcamentoToken(this.token.trim(), aprovado).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.loading = false;
-        this.respondido = true;
-        this.aprovado = aprovado;
-        this.notification.success('Resposta Registrada', `Orçamento ${aprovado ? 'Aprovado' : 'Recusado'}.`);
-      },
-      error: () => {
-        this.loading = false;
-      }
-    });
-  }
+    const context = new HttpContext().set(STATUS_TRATADOS_NA_TELA, [401, 403, 404, 409, 422]);
+    this.enviando.set(true);
+    this.erro.set(null);
 
-  resetar() {
-    this.respondido = false;
-    this.aprovado = false;
-    this.token = '';
+    this.http
+      .post<AuthClienteResponse>(API_ENDPOINTS.AUTH.CLIENTE, { cpf, email }, { context })
+      .pipe(
+        switchMap(authRes => {
+          const jwt = authRes?.token ?? authRes?.accessToken ?? '';
+          const headers = new HttpHeaders({ Authorization: `Bearer ${jwt}` });
+          return this.http.post<AprovacaoOrcamentoResponse>(
+            API_ENDPOINTS.ORCAMENTOS.APROVACAO(id),
+            {},
+            { headers, context }
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: res => {
+          this.aprovacao.set(res ?? { orcamentoId: id, status: 'Aprovado' });
+          this.enviando.set(false);
+        },
+        error: (e: HttpErrorResponse) => {
+          const resolvida = resolverMensagemErro(e.status, e.error?.codigo);
+          const padrao = resolvida?.mensagem ?? MENSAGENS_POR_STATUS[e.status]?.mensagem ?? 'Não foi possível aprovar o orçamento.';
+          this.erro.set(mensagemDoCodigo(e.error?.codigo, e.error?.mensagem ?? padrao));
+          this.enviando.set(false);
+        },
+      });
   }
 }

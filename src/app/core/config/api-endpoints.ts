@@ -4,28 +4,25 @@ export const API_BASE_URL = environment.apiUrl;
 
 const V1 = `${API_BASE_URL}/api/v1`;
 
-/** Endpoints da Surface do plano web-adaptacao: sempre `API_BASE_URL` + `/api/v1/...` (exceto o login). */
+/** Endpoints da Surface do plano web-adaptacao: sempre `API_BASE_URL` + `/api/v1/...` (exceto `/api/auth/login` e `/auth/cliente`). */
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: `${API_BASE_URL}/api/auth/login`,
+    CLIENTE: `${API_BASE_URL}/auth/cliente`,
   },
 
   ORDENS_SERVICO: {
     BASE: `${V1}/ordens-servico`,
     BY_ID: (id: string) => `${V1}/ordens-servico/${id}`,
-    CONSULTA: (id: string) => `${V1}/ordens-servico/${id}/consulta`,
     CANCELAMENTO: (id: string) => `${V1}/ordens-servico/${id}/cancelamento`,
   },
 
   ORCAMENTOS: {
     BASE: `${V1}/orcamentos`,
-    LINK_APROVACAO: (id: string) => `${V1}/orcamentos/${id}/link-aprovacao`,
-    PUBLICO: `${V1}/orcamentos/publico`,
-    PUBLICO_APROVACAO: `${V1}/orcamentos/publico/aprovacao`,
+    APROVACAO: (id: string) => `${V1}/orcamentos/${id}/aprovacao`,
   },
 
   PAGAMENTOS: {
-    BY_ID: (id: string) => `${V1}/pagamentos/${id}`,
     CHECKOUT: (id: string) => `${V1}/pagamentos/${id}/checkout`,
     REEMBOLSOS: (id: string) => `${V1}/pagamentos/${id}/reembolsos`,
   },
