@@ -1,398 +1,323 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {  Component, OnInit, inject, ChangeDetectionStrategy , DestroyRef } from '@angular/core';
-import { DatePipe, DecimalPipe } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
-import { InsumoService } from '../../../insumos/services/insumo.service';
-import { ServicoService } from '../../../servicos/services/servico.service';
-import { ClienteService } from '../../../clientes/services/cliente.service';
-import { VeiculoService } from '../../../veiculos/services/veiculo.service';
-import { OrdemServico, StatusOS } from '../../models/ordem-servico.model';
-import { Insumo } from '../../../insumos/models/insumo.model';
-import { Servico } from '../../../servicos/models/servico.model';
+import { AuthService } from '../../../auth/services/auth.service';
+import { ExecucaoResumo, OsDetalhe } from '../../models/ordem-servico.model';
 import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
-import { NotificationService } from '../../../../core/ui/notification.service';
-import { CustomSelectComponent, SelectOption } from '../../../../shared/components/custom-select/custom-select.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
-import { PlacaBadgeComponent } from '../../../../shared/components/placa-badge/placa-badge.component';
+import { OsCancelamentoComponent } from '../../components/os-cancelamento/os-cancelamento.component';
+
+type Carga<T> =
+  | { estado: 'carregando' }
+  | { estado: 'restrito' }
+  | { estado: 'erro' }
+  | { estado: 'vazio' }
+  | { estado: 'ok'; dado: T };
 
 @Component({
   selector: 'app-os-detalhe-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DatePipe, DecimalPipe, 
-    FormsModule, 
-    StatusBadgeComponent, 
-    CustomSelectComponent,
+    DatePipe,
+    FormsModule,
+    RouterLink,
+    StatusBadgeComponent,
     PageContainerComponent,
     IdBadgeComponent,
-    PlacaBadgeComponent
+    OsCancelamentoComponent,
   ],
   template: `
-    @if (os) {
-      <app-page-container>
-        <!-- Top Bar Header -->
+    <app-page-container>
+      @if (carregando()) {
+        <div class="card-panel aviso" role="status">Carregando OS...</div>
+      } @else if (os(); as os) {
         <div class="page-header">
           <div>
-            <div style="display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.3rem;">
+            <div class="cabecalho">
               <app-id-badge [text]="'#' + os.id.substring(0, 8)" size="lg"></app-id-badge>
               <app-status-badge [status]="os.status"></app-status-badge>
             </div>
-            <h1 class="page-title">{{ getVeiculoDesc(os.veiculoId) }} <app-placa-badge [placa]="getVeiculoPlaca(os.veiculoId)" size="lg" style="vertical-align: middle;"></app-placa-badge></h1>
-            <p class="page-subtitle">Proprietário: {{ getClienteNome(os.clienteId) }} | Data de Entrada: {{ os.dataAbertura | date:'dd/MM/yyyy HH:mm' }}</p>
-          </div>
-
-          <!-- Ações Rápidas de Transição de Status -->
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            @if (os.status === StatusOS.Recebida) {
-              <button (click)="alterarStatus(StatusOS.EmDiagnostico)" class="btn btn-primary">
-                🔧 Iniciar Diagnóstico
-              </button>
-            }
-
-            @if (os.status === StatusOS.EmDiagnostico) {
-              <button (click)="enviarParaAprovacao()" class="btn btn-accent">
-                ✉️ Enviar Orçamento
-              </button>
-            }
-
-            @if (os.status === StatusOS.AguardandoAprovacao) {
-              <button (click)="alterarStatus(StatusOS.EmExecucao)" class="btn btn-primary">
-                ▶️ Iniciar Execução
-              </button>
-            }
-
-            @if (os.status === StatusOS.EmExecucao) {
-              <button (click)="alterarStatus(StatusOS.Finalizada)" class="btn btn-success">
-                ✅ Finalizar OS
-              </button>
+            <h1 class="page-title">Ordem de Serviço</h1>
+            <p class="page-subtitle">
+              Cliente {{ os.clienteId.substring(0, 8) }} | Veículo {{ os.veiculoId.substring(0, 8) }}
+            </p>
+            @if (os.observacao) {
+              <p class="page-subtitle">Observação: {{ os.observacao }}</p>
             }
           </div>
+          <a routerLink="/ordens-servico/fila" class="btn btn-secondary">Voltar ao Kanban</a>
         </div>
 
-        <!-- Grid Workbench 2 Colunas -->
-        <div class="workbench-grid">
-          <!-- Coluna Esquerda: Diagnóstico & Peças/Serviços -->
-          <div class="main-column">
-
-            <!-- Diagnóstico do Mecânico -->
-            <div class="card-panel">
-              <h3 class="card-title">📝 Diagnóstico do Mecânico</h3>
-              <div class="form-group" style="margin-top: 1rem;">
-                <textarea [(ngModel)]="os.observacoesDiagnostico" rows="3" placeholder="Insira o laudo técnico do veículo..." class="form-control"></textarea>
-              </div>
-              <button (click)="salvarDiagnostico()" class="btn btn-secondary btn-sm" style="margin-top: 0.5rem;">
-                Salvar Diagnóstico
+        <div class="grade">
+          <section class="card-panel" aria-label="Observação">
+            <h3 class="secao">Observação</h3>
+            <form (ngSubmit)="salvarObservacao()" class="form-obs">
+              <label class="form-label" for="observacao-detalhe">Observação da OS</label>
+              <textarea
+                id="observacao-detalhe"
+                class="form-control"
+                rows="3"
+                [(ngModel)]="observacaoEditada"
+                name="observacao"
+                [disabled]="salvandoObservacao()"
+                placeholder="Informe observações sobre a OS..."
+              ></textarea>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                [disabled]="salvandoObservacao()"
+              >
+                {{ salvandoObservacao() ? 'Salvando...' : 'Salvar observação' }}
               </button>
-            </div>
-
-            <!-- Tabela de Mão de Obra e Serviços -->
-            <div class="card-panel" style="margin-top: 1.5rem;">
-              <div class="card-header-flex">
-                <h3 class="card-title">🛠️ Serviços de Mão de Obra</h3>
-                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                  <div style="width: 260px;">
-                    <app-custom-select
-                      [options]="servicoOptions"
-                      [value]="servicoIdSelecionado"
-                      [loading]="loadingCatalogos"
-                      placeholder="-- Selecionar Serviço --"
-                      (valueChange)="servicoIdSelecionado = $event"
-                    ></app-custom-select>
-                  </div>
-                  <button (click)="adicionarServico()" [disabled]="!servicoIdSelecionado || loadingCatalogos" class="btn btn-primary btn-sm">+ Adicionar</button>
-                </div>
-              </div>
-
-              <table class="data-table" style="margin-top: 1rem;">
-                <thead>
-                  <tr>
-                    <th>Serviço</th>
-                    <th style="text-align: center;">Valor</th>
-                    <th>Status Execução</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (item of os.itensServico; track item.id) {
-                    <tr>
-                      <td style="font-weight: 600;">{{ item.nomeServico }}</td>
-                      <td style="text-align: center;">R$ {{ item.valor | number:'1.2-2' }}</td>
-                      <td>
-                        <label style="display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                          <input type="checkbox" [checked]="item.concluido" (change)="alternarServico(item)" />
-                          <span [style.color]="item.concluido ? '#10B981' : '#F59E0B'" style="font-weight: 600; font-size: 0.85rem;">
-                            {{ item.concluido ? '✓ Concluído' : 'Pendente' }}
-                          </span>
-                        </label>
-                      </td>
-                    </tr>
-                  } @empty {
-                    <tr><td colspan="3" class="empty-text">Nenhum serviço adicionado.</td></tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-
-            <!-- Tabela de Peças & Insumos Utilizados -->
-            <div class="card-panel" style="margin-top: 1.5rem;">
-              <div class="card-header-flex">
-                <h3 class="card-title">📦 Peças e Insumos</h3>
-                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                  <div style="width: 260px;">
-                    <app-custom-select
-                      [options]="insumoOptions"
-                      [value]="insumoIdSelecionado"
-                      [loading]="loadingCatalogos"
-                      placeholder="-- Selecionar Peça --"
-                      (valueChange)="insumoIdSelecionado = $event"
-                    ></app-custom-select>
-                  </div>
-                  <input type="number" [(ngModel)]="quantidadeInsumo" min="1" class="form-control" style="width: 70px; padding: 0.4rem 0.5rem; height: 38px;" />
-                  <button (click)="adicionarInsumo()" [disabled]="!insumoIdSelecionado || loadingCatalogos" class="btn btn-primary btn-sm">+ Adicionar</button>
-                </div>
-              </div>
-
-              <table class="data-table" style="margin-top: 1rem;">
-                <thead>
-                  <tr>
-                    <th>Peça/Insumo</th>
-                    <th style="text-align: center;">Qtd</th>
-                    <th style="text-align: center;">Unitário</th>
-                    <th style="text-align: center;">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (item of os.itensInsumo; track item.id) {
-                    <tr>
-                      <td style="font-weight: 600;">{{ item.nomeInsumo }}</td>
-                      <td style="text-align: center;">{{ item.quantidade }}x</td>
-                      <td style="text-align: center;">R$ {{ item.valorUnitario | number:'1.2-2' }}</td>
-                      <td style="font-weight: 700; color: #E2E8F0; text-align: center;">R$ {{ item.valorTotal | number:'1.2-2' }}</td>
-                    </tr>
-                  } @empty {
-                    <tr><td colspan="4" class="empty-text">Nenhuma peça adicionada.</td></tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-
-          <!-- Coluna Direita: Resumo Financeiro & Informações -->
-          <div class="side-column">
-            <div class="card-panel sticky-panel">
-              <h3 class="card-title">💰 Resumo Financeiro</h3>
-
-              <div class="summary-list">
-                <div class="summary-item">
-                  <span>Subtotal Serviços:</span>
-                  <span>R$ {{ calcularSubtotalServicos() | number:'1.2-2' }}</span>
-                </div>
-                <div class="summary-item">
-                  <span>Subtotal Insumos:</span>
-                  <span>R$ {{ calcularSubtotalInsumos() | number:'1.2-2' }}</span>
-                </div>
-                <div class="summary-divider"></div>
-                <div class="summary-total">
-                  <span>VALOR TOTAL:</span>
-                  <span class="total-amount">R$ {{ os.valorTotal | number:'1.2-2' }}</span>
-                </div>
-              </div>
-
-              @if (os.approvalToken) {
-                <div class="token-box">
-                  <div style="font-size: 0.75rem; color: #A1A1AA; margin-bottom: 0.3rem;">Token de Aprovação:</div>
-                  <code class="token-code">{{ os.approvalToken }}</code>
-                </div>
+              @if (observacaoSalva()) {
+                <p class="aviso-ok" role="status">Observação salva com sucesso.</p>
               }
+            </form>
+          </section>
+
+          <section class="card-panel" aria-label="Histórico">
+            <h3 class="secao">Histórico</h3>
+            <ul class="lista">
+              @for (h of os.historico; track $index) {
+                <li class="linha">
+                  <app-status-badge [status]="h.status" size="sm"></app-status-badge>
+                  <span class="data">{{ h.em | date: 'dd/MM/yyyy HH:mm' }}</span>
+                </li>
+              } @empty {
+                <li class="linha">Sem movimentações registradas.</li>
+              }
+            </ul>
+          </section>
+
+          <section class="card-panel" aria-label="Orçamento e Pagamento">
+            <h3 class="secao">Orçamento e Pagamento</h3>
+            <p class="aviso">Monte o orçamento ou acesse o checkout de pagamento desta OS.</p>
+            <div class="acoes-fluxo">
+              <a
+                routerLink="/orcamentos/novo"
+                [queryParams]="{ ordemServicoId: os.id, clienteId: os.clienteId }"
+                class="btn btn-primary"
+              >
+                Montar orçamento
+              </a>
+              <a
+                routerLink="/pagamentos"
+                [queryParams]="{ ordemServicoId: os.id }"
+                class="btn btn-secondary"
+              >
+                Abrir pagamento
+              </a>
             </div>
-          </div>
+          </section>
+
+          <section class="card-panel" aria-label="Execução">
+            <h3 class="secao">Execução</h3>
+            @switch (execucao().estado) {
+              @case ('carregando') {
+                <p class="aviso">Carregando execução...</p>
+              }
+              @case ('restrito') {
+                <p class="aviso">Indisponível para o seu perfil.</p>
+              }
+              @case ('erro') {
+                <p class="aviso">Não foi possível carregar a execução.</p>
+              }
+              @case ('vazio') {
+                <p class="aviso">Sem execução para esta OS.</p>
+              }
+              @case ('ok') {
+                @if (execucaoOk(); as e) {
+                  <div class="linha">
+                    <span>Estado</span>
+                    <strong>{{ e.status }}</strong>
+                  </div>
+                  @if (e.mecanicoId) {
+                    <div class="linha">
+                      <span>Mecânico</span>
+                      <strong>{{ e.mecanicoId.substring(0, 8) }}</strong>
+                    </div>
+                  }
+                }
+              }
+            }
+          </section>
+
+          @if (podeCancelar() && os.status !== 'Cancelada' && os.status !== 'Paga') {
+            <app-os-cancelamento [osId]="os.id" (cancelada)="carregar()"></app-os-cancelamento>
+          }
         </div>
-      </app-page-container>
-    }
+      } @else {
+        <div class="card-panel aviso" role="alert">Não foi possível carregar a OS.</div>
+      }
+    </app-page-container>
   `,
-  styles: [`
-    .workbench-grid {
-      display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 1.5rem;
-    }
-    @media (max-width: 900px) {
-      .workbench-grid { grid-template-columns: 1fr; }
-    }
-    .card-title {
-      font-family: 'Outfit', sans-serif;
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #ffffff;
-    }
-    .card-header-flex {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-    }
-    .form-control-sm { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
-    .btn-sm { padding: 0.4rem 0.85rem; font-size: 0.8rem; }
-    .empty-text { text-align: center; color: #71717A; padding: 1.5rem; }
-    .summary-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem; }
-    .summary-item { display: flex; justify-content: space-between; color: #A1A1AA; font-size: 0.9rem; }
-    .summary-divider { height: 1px; background: rgba(255, 255, 255, 0.08); margin: 0.5rem 0; }
-    .summary-total { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 1rem; color: #ffffff; }
-    .total-amount { font-family: 'JetBrains Mono', monospace; font-size: 1.35rem; color: #10B981; }
-    .token-box { background: rgba(10, 10, 12, 0.8); border: 1px solid rgba(237, 20, 91, 0.3); border-radius: 8px; padding: 0.75rem; margin-top: 1.5rem; }
-    .token-code { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #ED145B; word-break: break-all; }
-  `]
+  styles: [
+    `
+      .cabecalho {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        margin-bottom: 0.3rem;
+      }
+      .grade {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.25rem;
+      }
+      .secao {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.05rem;
+        color: #ed145b;
+        margin-bottom: 0.75rem;
+      }
+      .form-obs {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .acoes-fluxo {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 0.75rem;
+      }
+      .lista {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .linha {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.45rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .data {
+        color: #a1a1aa;
+        font-size: 0.85rem;
+      }
+      .aviso {
+        color: #a1a1aa;
+        padding: 0.5rem 0;
+      }
+      .aviso-ok {
+        color: #10b981;
+        font-size: 0.85rem;
+        margin: 0;
+      }
+    `,
+  ],
 })
 export class OsDetalhePageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
-  StatusOS = StatusOS;
-  osId!: string;
-  os!: OrdemServico;
-
-  servicosDisponiveis: Servico[] = [];
-  insumosDisponiveis: Insumo[] = [];
-
-  servicoOptions: SelectOption[] = [];
-  insumoOptions: SelectOption[] = [];
-
-  servicoIdSelecionado = '';
-  insumoIdSelecionado = '';
-  quantidadeInsumo = 1;
-  loadingCatalogos = true;
-  clientes: any[] = [];
-  veiculos: any[] = [];
-
-  private readonly route = inject(ActivatedRoute);
   private readonly osService = inject(OrdemServicoService);
-  private readonly servicoService = inject(ServicoService);
-  private readonly insumoService = inject(InsumoService);
-  private readonly clienteService = inject(ClienteService);
-  private readonly veiculoService = inject(VeiculoService);
-  private readonly notification = inject(NotificationService);
+  private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute, { optional: true });
+
+  /** Id da OS, ligado ao parâmetro `:id` da rota (withComponentInputBinding ou ActivatedRoute). */
+  readonly id = input<string>('');
+
+  readonly os = signal<OsDetalhe | null>(null);
+  readonly carregando = signal(true);
+  readonly execucao = signal<Carga<ExecucaoResumo>>({ estado: 'carregando' });
+
+  observacaoEditada = '';
+  readonly salvandoObservacao = signal(false);
+  readonly observacaoSalva = signal(false);
+
+  readonly execucaoOk = computed(() => this.dadoOk(this.execucao()));
+
+  podeCancelar(): boolean {
+    const user = this.auth.currentUser();
+    return !user || this.auth.hasRole(['Administrador', 'Atendente']);
+  }
 
   ngOnInit() {
-    this.osId = this.route.snapshot.paramMap.get('id') || '';
-    if (this.osId) {
-      this.carregarOS();
-      this.carregarCatalogos();
+    this.carregar();
+  }
+
+  private resolverId(): string {
+    return this.id() || this.route?.snapshot?.paramMap?.get('id') || '';
+  }
+
+  carregar() {
+    const id = this.resolverId();
+    if (!id) {
+      this.carregando.set(false);
+      return;
+    }
+
+    this.osService
+      .obter(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: os => {
+          this.os.set(os);
+          this.observacaoEditada = os.observacao ?? '';
+          this.carregando.set(false);
+        },
+        error: () => {
+          this.os.set(null);
+          this.carregando.set(false);
+        },
+      });
+
+    const user = this.auth.currentUser();
+    if (!user || this.auth.hasRole(['Administrador', 'Mecanico'])) {
+      this.osService
+        .obterExecucao(id)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: e => this.execucao.set(e ? { estado: 'ok', dado: e } : { estado: 'vazio' }),
+          error: err =>
+            this.execucao.set(err?.status === 403 ? { estado: 'restrito' } : { estado: 'erro' }),
+        });
+    } else {
+      this.execucao.set({ estado: 'restrito' });
     }
   }
 
-  carregarOS() {
-    this.osService.getById(this.osId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(data => this.os = data as unknown as OrdemServico);
-    this.clienteService.getAll(1, 500).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(c => this.clientes = c.items || []);
-    this.veiculoService.getAll(1, 500).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(v => this.veiculos = v.items || []);
+  salvarObservacao() {
+    const atual = this.os();
+    if (!atual) return;
+
+    this.salvandoObservacao.set(true);
+    this.observacaoSalva.set(false);
+    const novaObservacao = this.observacaoEditada.trim() || null;
+
+    this.osService
+      .atualizarObservacao(atual.id, novaObservacao)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: res => {
+          const obsAtualizada = res?.observacao ?? novaObservacao ?? undefined;
+          this.os.set({ ...atual, observacao: obsAtualizada });
+          this.observacaoEditada = obsAtualizada ?? '';
+          this.salvandoObservacao.set(false);
+          this.observacaoSalva.set(true);
+        },
+        error: () => {
+          this.salvandoObservacao.set(false);
+        },
+      });
   }
 
-  getClienteNome(id: string): string {
-    return this.clientes.find(c => c.id === id)?.nome || 'Carregando...';
-  }
-
-  getVeiculoDesc(id: string): string {
-    const v = this.veiculos.find(v => v.id === id);
-    return v ? `${v.marca} ${v.modelo}` : 'Carregando...';
-  }
-
-  getVeiculoPlaca(id: string): string {
-    const v = this.veiculos.find(v => v.id === id);
-    return v ? v.placa : '---';
-  }
-
-  carregarCatalogos() {
-    this.loadingCatalogos = true;
-    let s = false, i = false;
-    const check = () => { if (s && i) this.loadingCatalogos = false; };
-
-    this.servicoService.getAll(1, 100).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(res => {
-      this.servicosDisponiveis = res.items || [];
-      this.servicoOptions = this.servicosDisponiveis.map(sv => ({
-        value: sv.id!,
-        label: `${sv.nome} (R$ ${sv.valorTabelado.toFixed(2)})`
-      }));
-      s = true; check();
-    });
-    this.insumoService.getAll(1, 100).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(res => {
-      this.insumosDisponiveis = res.items || [];
-      this.insumoOptions = this.insumosDisponiveis.map(ins => ({
-        value: ins.id!,
-        label: `${ins.nome} (Estoque: ${ins.quantidadeEstoque})`
-      }));
-      i = true; check();
-    });
-  }
-
-  alterarStatus(novoStatus: StatusOS) {
-    this.osService.atualizarStatus(this.osId, novoStatus).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (atualizada) => {
-        this.os = atualizada;
-        this.notification.success('Status Atualizado', 'Status da OS alterado com sucesso.');
-      }
-    });
-  }
-
-  salvarDiagnostico() {
-    if (!this.os.observacoesDiagnostico) return;
-    this.osService.registrarDiagnostico(this.osId, this.os.observacoesDiagnostico).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.notification.success('Diagnóstico Salvo', 'Laudo de diagnóstico registrado.');
-      }
-    });
-  }
-
-  adicionarServico() {
-    if (!this.servicoIdSelecionado) return;
-    this.osService.adicionarServico(this.osId, { servicoId: this.servicoIdSelecionado }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (atualizada) => {
-        this.os = atualizada;
-        this.servicoIdSelecionado = '';
-        this.notification.success('Serviço Adicionado', 'Item incluído na ordem.');
-      }
-    });
-  }
-
-  adicionarInsumo() {
-    if (!this.insumoIdSelecionado || this.quantidadeInsumo < 1) return;
-    this.osService.adicionarInsumo(this.osId, { insumoId: this.insumoIdSelecionado, quantidade: this.quantidadeInsumo }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (atualizada) => {
-        this.os = atualizada;
-        this.insumoIdSelecionado = '';
-        this.quantidadeInsumo = 1;
-        this.notification.success('Peça Adicionada', 'Insumo incluído no orçamento.');
-      }
-    });
-  }
-
-  alternarServico(item: any) {
-    const novoStatus = !item.concluido;
-    this.osService.alternarStatusItemServico(this.osId, item.id, novoStatus).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        item.concluido = novoStatus;
-        this.notification.info('Item Atualizado', `Serviço marcado como ${novoStatus ? 'Concluído' : 'Pendente'}.`);
-      }
-    });
-  }
-
-  enviarParaAprovacao() {
-    this.osService.enviarParaAprovacao(this.osId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => {
-        this.notification.success('Orçamento Enviado', 'E-mail enviado ao cliente com link de aprovação.');
-        this.carregarOS();
-      }
-    });
-  }
-
-  calcularSubtotalServicos(): number {
-    if (!this.os?.itensServico) return 0;
-    return this.os.itensServico.reduce((acc, curr) => acc + curr.valor, 0);
-  }
-
-  calcularSubtotalInsumos(): number {
-    if (!this.os?.itensInsumo) return 0;
-    return this.os.itensInsumo.reduce((acc, curr) => acc + curr.valorTotal, 0);
+  private dadoOk<T>(carga: Carga<T>): T | null {
+    return carga.estado === 'ok' ? carga.dado : null;
   }
 }
