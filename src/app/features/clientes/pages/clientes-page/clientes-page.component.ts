@@ -1,36 +1,35 @@
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {  Component, OnInit, inject, ChangeDetectorRef, ChangeDetectionStrategy , DestroyRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ClienteService } from '../../services/cliente.service';
 import { Cliente } from '../../models/cliente.model';
-import { CpfCnpjPipe } from '../../../../shared/pipes/cpf-cnpj.pipe';
 import { MaskDirective } from '../../../../shared/directives/mask.directive';
 import { NotificationService } from '../../../../core/ui/notification.service';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination.component';
 import { CustomSelectComponent, SelectOption } from '../../../../shared/components/custom-select/custom-select.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { DocumentoBadgeComponent } from '../../../../shared/components/documento-badge/documento-badge.component';
+import { ModalDialogComponent } from '../../../../shared/components/modal-dialog/modal-dialog.component';
 
 @Component({
   selector: 'app-clientes-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-     
-    FormsModule, 
-    CpfCnpjPipe, 
-    MaskDirective, 
-    PaginationComponent, 
+    FormsModule,
+    MaskDirective,
+    PaginationComponent,
     CustomSelectComponent,
     PageContainerComponent,
-    DocumentoBadgeComponent
+    DocumentoBadgeComponent,
+    ModalDialogComponent
   ],
   template: `
     <app-page-container>
       <div class="page-header">
         <div>
           <h1 class="page-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ED145B" stroke-width="2.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
             Clientes
           </h1>
         </div>
@@ -50,8 +49,8 @@ import { DocumentoBadgeComponent } from '../../../../shared/components/documento
         <table class="data-table">
           <thead>
             <tr>
-              <th>Cliente</th>
-              <th>CPF / CNPJ</th>
+              <th>Nome / Razão Social</th>
+              <th>Documento</th>
               <th>E-mail</th>
               <th>Telefone</th>
               <th>Ações</th>
@@ -62,20 +61,20 @@ import { DocumentoBadgeComponent } from '../../../../shared/components/documento
               <tr>
                 <td style="font-weight: 600;">{{ c.nome }}</td>
                 <td>
-                  <app-documento-badge [documento]="c.documento | cpfCnpj"></app-documento-badge>
+                  <app-documento-badge [documento]="c.documento"></app-documento-badge>
                 </td>
                 <td>{{ c.email }}</td>
                 <td>{{ c.telefone }}</td>
                 <td>
-                  <div style="display: inline-flex; gap: 0.5rem;">
+                  <div style="display: flex; gap: 0.5rem;">
                     <button (click)="editar(c)" class="btn btn-secondary btn-sm" title="Editar Cliente">✏️ Editar</button>
-                    <button (click)="excluir(c.id!)" class="btn btn-danger btn-sm" title="Excluir Cliente">🗑️ Excluir</button>
+                    <button (click)="excluir(c.id!)" class="btn btn-danger btn-sm" title="Excluir Cliente">🗑️</button>
                   </div>
                 </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="5" style="text-align: center; padding: 2.5rem; color: #71717A;">
+                <td colspan="5" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
                   Nenhum cliente cadastrado.
                 </td>
               </tr>
@@ -96,72 +95,87 @@ import { DocumentoBadgeComponent } from '../../../../shared/components/documento
       </app-pagination>
 
       <!-- Modal de Cadastro / Edição -->
-      @if (exibirModal) {
-        <div class="modal-backdrop fade-in">
-          <div class="modal-card">
-            <div class="modal-header">
-              <h3>{{ editandoId ? 'Editar Cliente' : 'Novo Cliente' }}</h3>
-              <button (click)="exibirModal = false" class="btn-close">&times;</button>
+      <app-modal-dialog
+        [isOpen]="exibirModal"
+        [title]="editandoId ? 'Editar Cliente' : 'Novo Cliente'"
+        (close)="exibirModal = false"
+      >
+        <form (ngSubmit)="salvar()">
+          <div class="form-group">
+            <label class="form-label">Nome</label>
+            <input type="text" [(ngModel)]="formCliente.nome" name="nome" required placeholder="Nome completo ou razão social" class="form-control" />
+          </div>
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Tipo de Pessoa</label>
+              <app-custom-select
+                [options]="tipoDocumentoOptions"
+                [value]="formCliente.tipoDocumento || 'CPF'"
+                [disabled]="!!editandoId"
+                placeholder="Selecione o Tipo"
+                (valueChange)="formCliente.tipoDocumento = $any($event)"
+              ></app-custom-select>
             </div>
 
-            <form (ngSubmit)="salvar()">
-              <div class="form-group">
-                <label class="form-label">Nome</label>
-                <input type="text" [(ngModel)]="formCliente.nome" name="nome" required placeholder="Nome completo ou razão social" class="form-control" />
-              </div>
-
-              <div class="grid-2">
-                <div class="form-group">
-                  <label class="form-label">Tipo de Pessoa</label>
-                  <app-custom-select
-                    [options]="tipoDocumentoOptions"
-                    [value]="formCliente.tipoDocumento || 'CPF'"
-                    placeholder="Selecione o Tipo"
-                    (valueChange)="formCliente.tipoDocumento = $any($event)"
-                  ></app-custom-select>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">CPF / CNPJ</label>
-                  <input type="text" [(ngModel)]="formCliente.documento" name="documento" appMask="cpfCnpj" required placeholder="000.000.000-00" class="form-control" />
-                </div>
-              </div>
-
-              <div class="grid-2">
-                <div class="form-group">
-                  <label class="form-label">E-mail</label>
-                  <input type="email" [(ngModel)]="formCliente.email" name="email" required placeholder="cliente@email.com" class="form-control" />
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Telefone</label>
-                  <input type="text" [(ngModel)]="formCliente.telefone" name="telefone" appMask="telefone" required placeholder="(11) 99999-9999" class="form-control" />
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Endereço Completo</label>
-                <input type="text" [(ngModel)]="formCliente.endereco" name="endereco" placeholder="Rua, Número, Bairro, Cidade - UF" class="form-control" />
-              </div>
-
-              <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
-                <button type="button" (click)="exibirModal = false" class="btn btn-secondary">Cancelar</button>
-                <button type="submit" class="btn btn-primary">Salvar Cliente</button>
-              </div>
-            </form>
+            <div class="form-group">
+              <label class="form-label">CPF / CNPJ</label>
+              <input
+                type="text"
+                [(ngModel)]="formCliente.documento"
+                name="documento"
+                appMask="cpfCnpj"
+                required
+                [disabled]="!!editandoId"
+                placeholder="000.000.000-00"
+                class="form-control"
+              />
+            </div>
           </div>
-        </div>
-      }
+
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">E-mail</label>
+              <input type="email" [(ngModel)]="formCliente.email" name="email" required placeholder="cliente@email.com" class="form-control" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Telefone</label>
+              <input type="text" [(ngModel)]="formCliente.telefone" name="telefone" appMask="telefone" required placeholder="(11) 99999-9999" class="form-control" />
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button type="button" (click)="exibirModal = false" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Salvar Cliente</button>
+          </div>
+        </form>
+      </app-modal-dialog>
     </app-page-container>
   `,
   styles: [`
     .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(10, 10, 12, 0.8); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
-    .modal-card { background: #18181C; border: 1px solid rgba(237, 20, 91, 0.3); border-radius: 12px; padding: 2rem; max-width: 580px; width: 100%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9); }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .modal-header h3 { font-family: 'Outfit', sans-serif; font-weight: 700; color: #fff; }
-    .btn-close { background: none; border: none; color: #A1A1AA; font-size: 1.5rem; cursor: pointer; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 0.5rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
+    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
+    .form-control {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .form-control:focus {
+      border-color: var(--primary);
+    }
+    .form-control:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
   `]
 })
 export class ClientesPageComponent implements OnInit {
@@ -186,7 +200,6 @@ export class ClientesPageComponent implements OnInit {
     telefone: '',
     documento: '',
     tipoDocumento: 'CPF',
-    endereco: ''
   };
 
   loading = false;
@@ -228,7 +241,7 @@ export class ClientesPageComponent implements OnInit {
 
   abrirModalNovo() {
     this.editandoId = null;
-    this.formCliente = { nome: '', email: '', telefone: '', documento: '', tipoDocumento: 'CPF', endereco: '' };
+    this.formCliente = { nome: '', email: '', telefone: '', documento: '', tipoDocumento: 'CPF' };
     this.exibirModal = true;
   }
 
@@ -250,7 +263,7 @@ export class ClientesPageComponent implements OnInit {
     } else {
       this.clienteService.criar(this.formCliente).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: () => {
-          this.notification.success('Cliente Cadastrado', 'Novo cliente incluído na base.');
+          this.notification.success('Cliente Cadastrado', 'Novo cliente incluído no sistema.');
           this.exibirModal = false;
           this.carregar();
         }
@@ -259,10 +272,10 @@ export class ClientesPageComponent implements OnInit {
   }
 
   excluir(id: string) {
-    if (confirm('Deseja realmente remover este cliente?')) {
+    if (confirm('Deseja remover este cliente?')) {
       this.clienteService.excluir(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: () => {
-          this.notification.info('Cliente Removido', 'Cadastro removido.');
+          this.notification.info('Cliente Removido', 'Cadastro excluído.');
           this.carregar();
         }
       });
