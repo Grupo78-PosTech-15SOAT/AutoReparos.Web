@@ -14,10 +14,18 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
 import { AuthService } from '../../../auth/services/auth.service';
+import { ClienteService } from '../../../clientes/services/cliente.service';
+import { VeiculoService } from '../../../veiculos/services/veiculo.service';
+import { SagaService } from '../../../sagas/services/saga.service';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
+import { Cliente } from '../../../clientes/models/cliente.model';
+import { Veiculo } from '../../../veiculos/models/veiculo.model';
 import { ExecucaoResumo, OsDetalhe } from '../../models/ordem-servico.model';
 import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
+import { DocumentoBadgeComponent } from '../../../../shared/components/documento-badge/documento-badge.component';
+import { PlacaBadgeComponent } from '../../../../shared/components/placa-badge/placa-badge.component';
 import { OsCancelamentoComponent } from '../../components/os-cancelamento/os-cancelamento.component';
 
 type Carga<T> =
@@ -38,6 +46,8 @@ type Carga<T> =
     StatusBadgeComponent,
     PageContainerComponent,
     IdBadgeComponent,
+    DocumentoBadgeComponent,
+    PlacaBadgeComponent,
     OsCancelamentoComponent,
   ],
   template: `
@@ -52,8 +62,26 @@ type Carga<T> =
               <app-status-badge [status]="os.status"></app-status-badge>
             </div>
             <h1 class="page-title">Ordem de Serviço</h1>
-            <p class="page-subtitle">
-              Cliente {{ os.clienteId.substring(0, 8) }} | Veículo {{ os.veiculoId.substring(0, 8) }}
+            <p class="page-subtitle" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+              <span>
+                Cliente:
+                @if (cliente(); as c) {
+                  <strong>{{ c.nome }}</strong>
+                  <app-documento-badge [documento]="c.documento" size="sm"></app-documento-badge>
+                } @else {
+                  <span>{{ os.clienteId.substring(0, 8) }}</span>
+                }
+              </span>
+              <span>|</span>
+              <span>
+                Veículo:
+                @if (veiculo(); as v) {
+                  <strong>{{ v.modelo }}</strong>
+                  <app-placa-badge [placa]="v.placa" size="sm"></app-placa-badge>
+                } @else {
+                  <span>{{ os.veiculoId.substring(0, 8) }}</span>
+                }
+              </span>
             </p>
             @if (os.observacao) {
               <p class="page-subtitle">Observação: {{ os.observacao }}</p>
@@ -114,13 +142,34 @@ type Carga<T> =
               >
                 Montar orçamento
               </a>
-              <a
-                routerLink="/pagamentos"
-                [queryParams]="{ ordemServicoId: os.id }"
-                class="btn btn-secondary"
-              >
-                Abrir pagamento
-              </a>
+              @if (orcamentoId(); as orcId) {
+                <a
+                  routerLink="/aprovar-orcamento"
+                  [queryParams]="{ orcamentoId: orcId }"
+                  class="btn btn-secondary"
+                  data-testid="link-aprovar-orcamento"
+                >
+                  Link aprovação cliente
+                </a>
+              }
+              @if (pagamentoId(); as pagId) {
+                <a
+                  routerLink="/pagamentos"
+                  [queryParams]="{ ordemServicoId: os.id, pagamentoId: pagId }"
+                  class="btn btn-secondary"
+                  data-testid="link-abrir-pagamento"
+                >
+                  Abrir pagamento
+                </a>
+              } @else {
+                <a
+                  routerLink="/pagamentos"
+                  [queryParams]="{ ordemServicoId: os.id }"
+                  class="btn btn-secondary"
+                >
+                  Abrir pagamento
+                </a>
+              }
             </div>
           </section>
 
@@ -181,7 +230,7 @@ type Carga<T> =
       .secao {
         font-family: 'Outfit', sans-serif;
         font-size: 1.05rem;
-        color: #ed145b;
+        color: var(--primary);
         margin-bottom: 0.75rem;
       }
       .form-obs {
@@ -208,15 +257,15 @@ type Carga<T> =
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       }
       .data {
-        color: #a1a1aa;
+        color: var(--text-muted);
         font-size: 0.85rem;
       }
       .aviso {
-        color: #a1a1aa;
+        color: var(--text-muted);
         padding: 0.5rem 0;
       }
       .aviso-ok {
-        color: #10b981;
+        color: var(--status-finalizada, #10b981);
         font-size: 0.85rem;
         margin: 0;
       }
@@ -227,12 +276,21 @@ export class OsDetalhePageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly osService = inject(OrdemServicoService);
   private readonly auth = inject(AuthService);
+  private readonly clienteService = inject(ClienteService);
+  private readonly veiculoService = inject(VeiculoService);
+  private readonly sagaService = inject(SagaService);
+  private readonly osJornadaStore = inject(OsJornadaStore);
   private readonly route = inject(ActivatedRoute, { optional: true });
 
   /** Id da OS, ligado ao parâmetro `:id` da rota (withComponentInputBinding ou ActivatedRoute). */
   readonly id = input<string>('');
 
   readonly os = signal<OsDetalhe | null>(null);
+  readonly cliente = signal<Cliente | null>(null);
+  readonly veiculo = signal<Veiculo | null>(null);
+  readonly orcamentoId = signal<string | null>(null);
+  readonly pagamentoId = signal<string | null>(null);
+
   readonly carregando = signal(true);
   readonly execucao = signal<Carga<ExecucaoResumo>>({ estado: 'carregando' });
 
@@ -270,6 +328,60 @@ export class OsDetalhePageComponent implements OnInit {
           this.os.set(os);
           this.observacaoEditada = os.observacao ?? '';
           this.carregando.set(false);
+
+          // Atalhos locais conhecidos
+          const reg = this.osJornadaStore.obter(os.id);
+          if (reg?.orcamentoId) {
+            this.orcamentoId.set(reg.orcamentoId);
+          }
+          if (reg?.pagamentoId) {
+            this.pagamentoId.set(reg.pagamentoId);
+          }
+
+          // Se Administrador e ainda sem orcamentoId, consulta admin/sagas/{osId}
+          if (this.auth.hasRole(['Administrador']) && !this.orcamentoId()) {
+            this.sagaService
+              .obter(os.id)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: saga => {
+                  if (saga?.orcamentoId) {
+                    this.orcamentoId.set(saga.orcamentoId);
+                    this.osJornadaStore.salvar({ osId: os.id, orcamentoId: saga.orcamentoId });
+                  }
+                },
+                error: () => {},
+              });
+          }
+
+          // Salva jornada com IDs conhecidos
+          this.osJornadaStore.salvar({
+            osId: os.id,
+            clienteId: os.clienteId,
+            veiculoId: os.veiculoId,
+            ...(this.orcamentoId() ? { orcamentoId: this.orcamentoId()! } : {}),
+            ...(this.pagamentoId() ? { pagamentoId: this.pagamentoId()! } : {}),
+          });
+
+          // Resolve dados reais de cliente e veículo com fallback gracioso
+          if (os.clienteId) {
+            this.clienteService
+              .getById(os.clienteId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: c => this.cliente.set(c),
+                error: () => this.cliente.set(null),
+              });
+          }
+          if (os.veiculoId) {
+            this.veiculoService
+              .getById(os.veiculoId)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: v => this.veiculo.set(v),
+                error: () => this.veiculo.set(null),
+              });
+          }
         },
         error: () => {
           this.os.set(null);

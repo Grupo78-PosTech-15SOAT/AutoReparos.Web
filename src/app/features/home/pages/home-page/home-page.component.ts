@@ -53,9 +53,9 @@ import { AuthService } from '../../../auth/services/auth.service';
                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                  Painel Interno da Oficina
                </a>
-               <a routerLink="/consulta-publica" class="btn btn-secondary btn-lg">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                 Consulta Pública do Cliente
+               <a routerLink="/aprovar-orcamento" class="btn btn-secondary btn-lg">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                 Aprovação de Orçamento
                </a>
              </div>
            }
@@ -71,21 +71,6 @@ import { AuthService } from '../../../auth/services/auth.service';
          </div>
  
          <div class="modules-grid">
- 
-           <!-- Card 1: Portal Público -->
-           <div class="module-card">
-             <div class="card-top-line blue-line"></div>
-             <div class="card-header">
-               <div class="card-icon icon-blue">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-               </div>
-               <h3 class="module-title">Portal Público do Cliente</h3>
-             </div>
-             <a routerLink="/consulta-publica" class="module-link">
-               <span>Acessar Consulta Pública</span>
-               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-             </a>
-           </div>
  
            <!-- Card 2: Aprovação Digital -->
            <div class="module-card">

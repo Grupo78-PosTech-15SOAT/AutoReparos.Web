@@ -45,52 +45,104 @@ describe('FilaExecucaoPage', () => {
 
   afterEach(() => controller.verify());
 
-  it('filtra por status e mecanicoId em GET /api/v1/fila-execucao e executa etapas (Diagnostico e Reparo), concluir, falha e reexecutar', () => {
+  describe('FilaExecucaoPage descricao etapa', () => {
+    it('envia { tipo, descricao } preenchida ou fallback automático e indica na UI', () => {
+      auth.currentUser.set({ email: 'admin@auto.com', role: 'Administrador' });
+      fixture.detectChanges();
+
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush([
+        { id: 'exec-1', ordemServicoId: 'os-1', status: 'EmExecucao' }
+      ]);
+      fixture.detectChanges();
+
+      // Sem preencher descrição -> usa fallback padrão e mostra dica na tela
+      const hint = fixture.nativeElement.querySelector('[data-testid="hint-auto-descricao"]');
+      expect(hint).toBeTruthy();
+
+      component.registrarEtapa('exec-1', 'Diagnostico');
+      const reqDiag = controller.expectOne(API_ENDPOINTS.EXECUCAO.ETAPAS('exec-1'));
+      expect(reqDiag.request.method).toBe('POST');
+      expect(reqDiag.request.body.tipo).toBe('Diagnostico');
+      expect(reqDiag.request.body.descricao).toBe('Diagnóstico técnico realizado');
+      reqDiag.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmExecucao' });
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush([]);
+      fixture.detectChanges();
+
+      // Com descrição personalizada
+      component.descricoes['exec-1'] = 'Checagem de bobina';
+      component.registrarEtapa('exec-1', 'Reparo');
+      const reqRep = controller.expectOne(API_ENDPOINTS.EXECUCAO.ETAPAS('exec-1'));
+      expect(reqRep.request.body.tipo).toBe('Reparo');
+      expect(reqRep.request.body.descricao).toBe('Checagem de bobina');
+      reqRep.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmExecucao' });
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush([]);
+    });
+  });
+
+  describe('FilaExecucaoPage filtros', () => {
+    it('filtra por status e ?mecanico= e exibe histórico de etapas, motivo de falha e intervenção requerida', () => {
+      auth.currentUser.set({ email: 'admin@auto.com', role: 'Administrador' });
+      fixture.detectChanges();
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush([]);
+
+      component.filtroStatus = 'EmExecucao';
+      component.filtroMecanico = 'Carlos';
+      component.carregar();
+
+      const reqFiltrada = controller.expectOne(
+        r => r.url === API_ENDPOINTS.EXECUCAO.FILA &&
+             r.params.get('status') === 'EmExecucao' &&
+             r.params.get('mecanico') === 'Carlos'
+      );
+      reqFiltrada.flush([
+        {
+          id: 'exec-88',
+          ordemServicoId: 'os-99',
+          status: 'Falhou',
+          intervencaoRequerida: true,
+          motivoFalha: 'Insumo indisponível',
+          etapas: [
+            { sequencia: 1, tipo: 'Diagnostico', descricao: 'Diagnóstico técnico realizado', responsavel: 'Carlos' },
+            { sequencia: 2, tipo: 'Reparo', descricao: 'Scanner acusou falha', responsavel: 'Carlos' }
+          ]
+        }
+      ]);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('[data-testid="badge-intervencao"]')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('[data-testid="motivo-falha"]').textContent).toContain('Insumo indisponível');
+      expect(fixture.nativeElement.querySelector('[data-testid="historico-etapas"]').textContent).toContain('Scanner acusou falha');
+      const badgeAuto = fixture.nativeElement.querySelector('[data-testid="badge-descricao-automatica"]');
+      expect(badgeAuto).toBeTruthy();
+      expect(badgeAuto.textContent).toContain('(descrição automática)');
+    });
+  });
+
+  it('executa etapas, concluir, falha e reexecutar', () => {
     auth.currentUser.set({ email: 'admin@auto.com', role: 'Administrador' });
     fixture.detectChanges();
 
     const inicial = controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA);
     expect(inicial.request.method).toBe('GET');
-    inicial.flush([{ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmAndamento', mecanicoId: 'mec-9' }]);
+    inicial.flush([{ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmExecucao' }]);
     fixture.detectChanges();
-
-    component.filtroStatus = 'EmAndamento';
-    component.filtroMecanicoId = 'mec-9';
-    component.carregar();
-
-    const filtrada = controller.expectOne(
-      r =>
-        r.url === API_ENDPOINTS.EXECUCAO.FILA &&
-        r.params.get('status') === 'EmAndamento' &&
-        r.params.get('mecanicoId') === 'mec-9'
-    );
-    expect(filtrada.request.method).toBe('GET');
-    filtrada.flush({ itens: [{ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmAndamento', mecanicoId: 'mec-9' }] });
 
     // 1. Etapa Diagnostico
     component.registrarEtapa('exec-1', 'Diagnostico');
     const reqDiag = controller.expectOne(API_ENDPOINTS.EXECUCAO.ETAPAS('exec-1'));
     expect(reqDiag.request.method).toBe('POST');
-    expect(reqDiag.request.body).toMatchObject({ etapa: 'Diagnostico', tipo: 'Diagnostico' });
+    expect(reqDiag.request.body).toMatchObject({ tipo: 'Diagnostico' });
     reqDiag.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmDiagnostico' });
     controller.expectOne(r => r.url === API_ENDPOINTS.EXECUCAO.FILA).flush([]);
 
-    // 2. Etapa Reparo
-    component.registrarEtapa('exec-1', 'Reparo');
-    const reqReparo = controller.expectOne(API_ENDPOINTS.EXECUCAO.ETAPAS('exec-1'));
-    expect(reqReparo.request.method).toBe('POST');
-    expect(reqReparo.request.body).toMatchObject({ etapa: 'Reparo', tipo: 'Reparo' });
-    reqReparo.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmReparo' });
-    controller.expectOne(r => r.url === API_ENDPOINTS.EXECUCAO.FILA).flush([]);
-
-    // 3. Concluir
+    // 2. Concluir
     component.concluir('exec-1');
     const reqConclusao = controller.expectOne(API_ENDPOINTS.EXECUCAO.CONCLUSAO('exec-1'));
     expect(reqConclusao.request.method).toBe('POST');
     reqConclusao.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'Concluida' });
     controller.expectOne(r => r.url === API_ENDPOINTS.EXECUCAO.FILA).flush([]);
 
-    // 4. Marcar falha
+    // 3. Marcar falha
     component.marcarFalha('exec-1', 'Peça incompatível');
     const reqFalha = controller.expectOne(API_ENDPOINTS.EXECUCAO.FALHA('exec-1'));
     expect(reqFalha.request.method).toBe('POST');
@@ -98,12 +150,12 @@ describe('FilaExecucaoPage', () => {
     reqFalha.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'Falha' });
     controller.expectOne(r => r.url === API_ENDPOINTS.EXECUCAO.FILA).flush([]);
 
-    // 5. Reexecutar (Administrador)
+    // 4. Reexecutar (Administrador)
     component.reexecutar('exec-1', 'Peça substituída');
     const reqReexec = controller.expectOne(API_ENDPOINTS.EXECUCAO.REEXECUCAO('exec-1'));
     expect(reqReexec.request.method).toBe('POST');
     expect(reqReexec.request.body).toEqual({ motivo: 'Peça substituída' });
-    reqReexec.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmAndamento' });
+    reqReexec.flush({ id: 'exec-1', ordemServicoId: 'os-1', status: 'EmExecucao' });
     controller.expectOne(r => r.url === API_ENDPOINTS.EXECUCAO.FILA).flush([]);
   });
 

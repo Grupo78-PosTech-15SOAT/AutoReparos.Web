@@ -42,6 +42,11 @@ export interface CancelamentoResposta {
   estado?: string;
 }
 
+export interface RespostaFilaExecucao {
+  itens: ExecucaoResumo[];
+  restrito?: boolean;
+}
+
 /** Item da fila de execução vinculado à OS (`GET /api/v1/fila-execucao`). */
 export interface ExecucaoResumo {
   id: string;

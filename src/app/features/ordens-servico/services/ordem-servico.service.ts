@@ -7,6 +7,7 @@ import {
   ExecucaoResumo,
   OsDetalhe,
   OsResumo,
+  RespostaFilaExecucao,
   SagaAdminResumo,
 } from '../models/ordem-servico.model';
 import { API_ENDPOINTS } from '../../../core/config/api-endpoints';
@@ -55,23 +56,34 @@ export class OrdemServicoService {
 
   /** Estado da execução da OS na fila de execução; `null` quando não há execução. */
   obterExecucao(ordemServicoId: string): Observable<ExecucaoResumo | null> {
-    const params = new HttpParams().set('ordemServicoId', ordemServicoId);
+    const params = new HttpParams().set('status', 'Fila,EmExecucao,Concluida,Falhou,Cancelada');
     const context = new HttpContext().set(STATUS_TRATADOS_NA_TELA, [403, 404]);
     return this.http
       .get<ExecucaoResumo[] | { itens: ExecucaoResumo[] }>(API_ENDPOINTS.EXECUCAO.FILA, { params, context })
       .pipe(
         map(res => (Array.isArray(res) ? res : res?.itens ?? [])),
-        map(lista => lista.find(e => !e.ordemServicoId || e.ordemServicoId === ordemServicoId) ?? null),
+        map(lista => lista.find(e => e.ordemServicoId === ordemServicoId) ?? null),
         catchError(err => (err?.status === 404 ? of(null) : throwError(() => err)))
       );
   }
 
   /** Lista os itens da fila de execução (`GET /api/v1/fila-execucao`). */
-  listarFilaExecucao(): Observable<ExecucaoResumo[]> {
+  listarFilaExecucao(): Observable<RespostaFilaExecucao> {
     const context = new HttpContext().set(STATUS_TRATADOS_NA_TELA, [403]);
     return this.http
       .get<ExecucaoResumo[] | { itens: ExecucaoResumo[] }>(API_ENDPOINTS.EXECUCAO.FILA, { context })
-      .pipe(map(res => (Array.isArray(res) ? res : res?.itens ?? [])));
+      .pipe(
+        map(res => ({
+          itens: Array.isArray(res) ? res : res?.itens ?? [],
+          restrito: false,
+        })),
+        catchError(err => {
+          if (err?.status === 403) {
+            return of({ itens: [], restrito: true });
+          }
+          return throwError(() => err);
+        })
+      );
   }
 
   /** Lista as Sagas para o Administrador (`GET /api/v1/admin/sagas`). */

@@ -31,22 +31,28 @@ export class InsumoService {
 
   criar(insumo: Partial<Insumo>): Observable<Insumo> {
     const precoUnitario = Number(insumo.precoUnitario ?? insumo.valor ?? 0);
-    const saldoDisponivel = Number(insumo.saldoDisponivel ?? insumo.quantidadeEstoque ?? 0);
-    const payload = {
+    const quantidadeInicial = Number(insumo.quantidadeInicial ?? insumo.saldoDisponivel ?? insumo.quantidadeEstoque ?? 0);
+    const desc = insumo.descricao?.trim();
+    const payload: Record<string, unknown> = {
       nome: insumo.nome ?? '',
-      descricao: insumo.descricao,
       precoUnitario,
-      valor: precoUnitario,
-      saldoDisponivel,
-      quantidadeEstoque: saldoDisponivel,
+      quantidadeInicial,
+      quantidadeDisponivel: quantidadeInicial,
+      saldoDisponivel: quantidadeInicial,
     };
+    if (desc) {
+      payload['descricao'] = desc;
+    }
     return this.http.post<Insumo>(API_ENDPOINTS.INSUMOS.BASE, payload).pipe(
       map(res => normalizarInsumo(res ?? payload))
     );
   }
 
   registrarEntrada(id: string, entrada: RegistrarEntradaInsumoRequest): Observable<Insumo> {
-    return this.http.post<Insumo>(API_ENDPOINTS.INSUMOS.ENTRADAS(id), entrada).pipe(
+    const payload = {
+      quantidade: Number(entrada.quantidade)
+    };
+    return this.http.post<Insumo>(API_ENDPOINTS.INSUMOS.ENTRADAS(id), payload).pipe(
       map(res => normalizarInsumo(res ?? {}))
     );
   }
@@ -59,7 +65,7 @@ export class InsumoService {
       const obj = res as Record<string, unknown>;
       const lista = obj['items'] ?? obj['Items'] ?? obj['itens'] ?? obj['Itens'] ?? obj['data'] ?? obj['Data'];
       if (Array.isArray(lista)) {
-        return lista;
+        return lista as Partial<Insumo>[];
       }
     }
     return [];

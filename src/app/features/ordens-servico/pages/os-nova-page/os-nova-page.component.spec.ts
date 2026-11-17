@@ -6,7 +6,8 @@ import { Router, provideRouter } from '@angular/router';
 import { OsNovaPageComponent } from './os-nova-page.component';
 import { errorInterceptor } from '../../../../core/http/error.interceptor';
 import { API_ENDPOINTS } from '../../../../core/config/api-endpoints';
-import { MENSAGENS_POR_STATUS } from '../../../../core/http/error-catalog';
+import { MENSAGENS_POR_CODIGO, MENSAGENS_POR_STATUS } from '../../../../core/http/error-catalog';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 
 describe('OsNovaPage', () => {
   let fixture: ComponentFixture<OsNovaPageComponent>;
@@ -73,6 +74,10 @@ describe('OsNovaPage', () => {
     fixture.detectChanges();
 
     expect(navegar).toHaveBeenCalledWith(['/ordens-servico', 'os-12345678']);
+    const store = TestBed.inject(OsJornadaStore);
+    expect(store.obter('os-12345678')).toBeDefined();
+    expect(store.obter('os-12345678')?.clienteId).toBe('cli-1');
+    expect(store.obter('os-12345678')?.veiculoId).toBe('vei-1');
   });
 
   it('mostra o erro 422 no formulário e não redireciona quando a criação falha', () => {
@@ -92,7 +97,7 @@ describe('OsNovaPage', () => {
 
     const alerta = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement | null;
     expect(alerta).not.toBeNull();
-    expect(alerta?.textContent).toContain(MENSAGENS_POR_STATUS[422].mensagem);
+    expect(alerta?.textContent).toContain(MENSAGENS_POR_CODIGO['veiculo_de_outro_cliente']);
     expect(navegar).not.toHaveBeenCalled();
   });
 

@@ -4,14 +4,30 @@ import { DatePipe } from '@angular/common';
 import { SagaService } from '../../services/saga.service';
 import { ESTADOS_SAGA, SagaDetalhe, SagaResumo } from '../../models/saga.model';
 import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
+import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
+import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
+import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
+import { LoadingSpinnerComponent } from '../../../../shared/components/loading-spinner/loading-spinner.component';
+import { AlertBannerComponent } from '../../../../shared/components/alert-banner/alert-banner.component';
+import { CustomSelectComponent, SelectOption } from '../../../../shared/components/custom-select/custom-select.component';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 
 @Component({
   selector: 'app-sagas-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, DatePipe],
+  imports: [
+    FormsModule,
+    DatePipe,
+    PageContainerComponent,
+    IdBadgeComponent,
+    StatusBadgeComponent,
+    LoadingSpinnerComponent,
+    AlertBannerComponent,
+    CustomSelectComponent
+  ],
   template: `
-    <div class="page-wrapper">
+    <app-page-container>
       <header class="page-header">
         <div>
           <h1 class="page-title">Console de Sagas</h1>
@@ -22,18 +38,13 @@ import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
       <section class="filter-bar" aria-label="Filtros de Sagas">
         <div class="form-group">
           <label for="filtroEstado">Estado</label>
-          <select
-            id="filtroEstado"
-            name="filtroEstado"
-            [ngModel]="filtroEstado()"
-            (ngModelChange)="filtroEstado.set($event)"
+          <app-custom-select
+            [options]="opcoesEstados"
+            [value]="filtroEstado()"
+            placeholder="Todos os estados"
+            (valueChange)="filtroEstado.set($event)"
             data-testid="filtro-estado"
-          >
-            <option value="">Todos os estados</option>
-            @for (est of estados; track est) {
-              <option [value]="est">{{ est }}</option>
-            }
-          </select>
+          ></app-custom-select>
         </div>
 
         <div class="form-group">
@@ -62,14 +73,14 @@ import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
       </section>
 
       @if (erro()) {
-        <div class="alert alert-error" role="alert" data-testid="erro-saga">
-          {{ erro() }}
+        <div data-testid="erro-saga">
+          <app-alert-banner tipo="erro">{{ erro() }}</app-alert-banner>
         </div>
       }
 
       @if (mensagemSucesso()) {
-        <div class="alert alert-success" role="status" data-testid="sucesso-saga">
-          {{ mensagemSucesso() }}
+        <div data-testid="sucesso-saga">
+          <app-alert-banner tipo="sucesso">{{ mensagemSucesso() }}</app-alert-banner>
         </div>
       }
 
@@ -77,7 +88,9 @@ import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
         <section class="sagas-list-panel">
           <h2>Sagas ({{ sagas().length }})</h2>
           @if (carregando()) {
-            <p class="empty-msg">Carregando sagas...</p>
+            <div class="loading-box">
+              <app-loading-spinner message="Carregando sagas..."></app-loading-spinner>
+            </div>
           } @else if (sagas().length === 0) {
             <p class="empty-msg">Nenhuma saga encontrada para o filtro informado.</p>
           } @else {
@@ -93,8 +106,12 @@ import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
               <tbody>
                 @for (item of sagas(); track item.ordemServicoId) {
                   <tr [class.selected]="detalhe()?.ordemServicoId === item.ordemServicoId">
-                    <td class="mono">{{ item.ordemServicoId }}</td>
-                    <td><span class="badge">{{ item.estado }}</span></td>
+                    <td>
+                      <app-id-badge [text]="item.ordemServicoId" size="sm"></app-id-badge>
+                    </td>
+                    <td>
+                      <app-status-badge [status]="item.estado" size="sm"></app-status-badge>
+                    </td>
                     <td>{{ item.atualizadoEm | date:'short' }}</td>
                     <td>
                       <button
@@ -116,8 +133,10 @@ import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
         @if (detalhe(); as d) {
           <section class="saga-detail-panel" data-testid="detalhe-saga">
             <header class="detail-header">
-              <h2>Detalhe da Saga <span class="mono">{{ d.ordemServicoId }}</span></h2>
-              <span class="badge" data-testid="detalhe-estado">{{ d.estado }}</span>
+              <h2>Detalhe da Saga <app-id-badge [text]="d.ordemServicoId"></app-id-badge></h2>
+              <div data-testid="detalhe-estado">
+                <app-status-badge [status]="d.estado"></app-status-badge>
+              </div>
             </header>
 
             @if (d.estado === 'AguardandoInsumos') {
@@ -189,33 +208,35 @@ import { mensagemDoCodigo } from '../../../../core/http/error-catalog';
           </section>
         }
       </div>
-    </div>
+    </app-page-container>
   `,
   styles: [`
-    .page-wrapper { padding: 1.5rem; max-width: 1280px; margin: 0 auto; }
     .page-header { margin-bottom: 1.25rem; }
-    .page-title { font-size: 1.6rem; font-weight: 800; color: var(--text-main); }
-    .page-subtitle { color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem; }
-    .filter-bar { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1.25rem; background: var(--bg-card); padding: 1rem; border-radius: 10px; border: 1px solid var(--border-color); }
+    .page-title { font-size: 1.6rem; font-weight: 800; color: var(--text-main, #ffffff); }
+    .page-subtitle { color: var(--text-muted, #a1a1aa); font-size: 0.9rem; margin-top: 0.25rem; }
+    .filter-bar { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 1.25rem; background: var(--bg-card, rgba(255, 255, 255, 0.04)); padding: 1rem; border-radius: var(--radius-md, 10px); border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1)); }
     .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
     .sagas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-    .sagas-list-panel, .saga-detail-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; }
+    .sagas-list-panel, .saga-detail-panel { background: var(--bg-card, rgba(255, 255, 255, 0.04)); border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1)); border-radius: var(--radius-lg, 12px); padding: 1.25rem; }
     .sagas-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
-    .sagas-table th, .sagas-table td { text-align: left; padding: 0.6rem; border-bottom: 1px solid var(--border-color); }
+    .sagas-table th, .sagas-table td { text-align: left; padding: 0.6rem; border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1)); }
     .detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .detail-section { margin-top: 1rem; }
     .detail-list { list-style: none; padding: 0; margin: 0.5rem 0 0; display: flex; flex-direction: column; gap: 0.4rem; }
-    .retry-box { background: rgba(244, 63, 94, 0.08); border: 1px solid var(--border-pink); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-    .alert { padding: 0.85rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: 600; }
-    .alert-error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35); }
-    .alert-success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .retry-box { background: rgba(244, 63, 94, 0.08); border: 1px solid var(--border-pink, rgba(244, 63, 94, 0.3)); padding: 1rem; border-radius: var(--radius-md, 8px); margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .loading-box { padding: 2rem 0; display: flex; justify-content: center; }
     .mono { font-family: monospace; }
   `],
 })
 export class SagasPageComponent implements OnInit {
   private readonly sagaService = inject(SagaService);
+  private readonly osJornadaStore = inject(OsJornadaStore);
 
   readonly estados = ESTADOS_SAGA;
+  readonly opcoesEstados: SelectOption[] = [
+    { value: '', label: 'Todos os estados' },
+    ...ESTADOS_SAGA.map(e => ({ value: e, label: e }))
+  ];
   sagas = signal<SagaResumo[]>([]);
   detalhe = signal<SagaDetalhe | null>(null);
   carregando = signal(false);
@@ -243,6 +264,12 @@ export class SagasPageComponent implements OnInit {
         next: lista => {
           this.sagas.set(lista);
           this.carregando.set(false);
+          // Atualiza registros conhecidos na jornada
+          for (const s of lista) {
+            this.osJornadaStore.salvar({
+              osId: s.ordemServicoId
+            });
+          }
         },
         error: err => {
           this.carregando.set(false);
@@ -256,7 +283,15 @@ export class SagasPageComponent implements OnInit {
     this.mensagemSucesso.set(null);
     this.motivoRetentativa.set('');
     this.sagaService.obter(ordemServicoId).subscribe({
-      next: d => this.detalhe.set(d),
+      next: d => {
+        this.detalhe.set(d);
+        if (d) {
+          this.osJornadaStore.salvar({
+            osId: d.ordemServicoId,
+            orcamentoId: d.orcamentoId
+          });
+        }
+      },
       error: err => this.erro.set(mensagemDoCodigo(err?.error?.codigo, 'Não foi possível carregar o detalhe da saga.')),
     });
   }
@@ -280,9 +315,13 @@ export class SagasPageComponent implements OnInit {
         this.enviando.set(false);
         this.motivoRetentativa.set('');
         this.mensagemSucesso.set('Retentativa de reserva enviada com sucesso.');
+        const novoEstado = res?.estado || 'ReservandoInsumos';
         this.detalhe.set({
           ...atual,
-          estado: res?.estado || 'ReservandoInsumos',
+          estado: novoEstado,
+        });
+        this.osJornadaStore.salvar({
+          osId: atual.ordemServicoId
         });
       },
       error: err => {

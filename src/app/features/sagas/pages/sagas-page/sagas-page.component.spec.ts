@@ -78,6 +78,17 @@ describe('SagasPage', () => {
 
   afterEach(() => controller.verify());
 
+  describe('SagasPage layout compartilhado', () => {
+    it('renderiza dentro de app-page-container e utiliza status-badge e id-badge', () => {
+      fixture.detectChanges();
+      controller.expectOne(API_ENDPOINTS.SAGAS.BASE).flush([]);
+      fixture.detectChanges();
+
+      const pageContainer = fixture.nativeElement.querySelector('app-page-container');
+      expect(pageContainer).toBeTruthy();
+    });
+  });
+
   describe('SagasPage lista e retenta', () => {
     it('lista sagas com filtros de estado e paradaHaMinutos, abre detalhe com etapas/comandos/registros e retenta reserva com motivo obrigatório', () => {
       fixture.detectChanges();

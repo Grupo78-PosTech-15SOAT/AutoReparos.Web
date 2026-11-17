@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, map } from 'rxjs';
+import { Observable, map, throwError } from 'rxjs';
 import { Usuario } from '../models/usuario.model';
 import { API_ENDPOINTS } from '../../../core/config/api-endpoints';
 import { PagedResult } from '../../../shared/models/pagination.model';
@@ -28,18 +28,45 @@ export class UsuarioService {
       'Mecanico': 3
     };
 
+    const tipo = roleMapping[usuario.role];
+    if (tipo === undefined) {
+      return throwError(() => new Error(`Perfil de usuário inválido: ${usuario.role}`));
+    }
+
     const payload = {
       nomeCompleto: usuario.nome,
       email: usuario.email,
       password: usuario.senha,
-      tipo: roleMapping[usuario.role] || 3
+      tipo
     };
 
     return this.http.post<Usuario>(API_ENDPOINTS.USUARIOS.BASE, payload);
   }
 
-  atualizarRole(id: string, role: string): Observable<Usuario> {
-    return this.http.patch<Usuario>(API_ENDPOINTS.USUARIOS.ROLE(id), { role });
+  atualizar(id: string, req: { nomeCompleto: string; tipo: string | number }): Observable<void> {
+    const roleMapping: Record<string, number> = {
+      'Administrador': 1,
+      'Atendente': 2,
+      'Mecanico': 3
+    };
+
+    let tipoNumerico: number | undefined;
+    if (typeof req.tipo === 'number') {
+      if ([1, 2, 3].includes(req.tipo)) {
+        tipoNumerico = req.tipo;
+      }
+    } else {
+      tipoNumerico = roleMapping[req.tipo];
+    }
+
+    if (tipoNumerico === undefined) {
+      return throwError(() => new Error(`Perfil de usuário inválido: ${req.tipo}`));
+    }
+
+    return this.http.put<void>(API_ENDPOINTS.USUARIOS.BY_ID(id), {
+      nomeCompleto: req.nomeCompleto,
+      tipo: tipoNumerico
+    });
   }
 
   excluir(id: string): Observable<void> {
