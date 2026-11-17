@@ -24,14 +24,48 @@ export const routes: Routes = [
     data: { roles: ['Atendente', 'Administrador'] }
   },
   {
+    path: 'ordens-servico/:id/orcamento',
+    loadComponent: () => import('./features/orcamento/pages/orcamento-page/orcamento-page.component').then(m => m.OrcamentoPageComponent),
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['Atendente', 'Administrador'] }
+  },
+  {
     path: 'ordens-servico/:id',
     loadComponent: () => import('./features/ordens-servico/pages/os-detalhe-page/os-detalhe-page.component').then(m => m.OsDetalhePageComponent),
     canActivate: [authGuard]
   },
   {
     path: 'ordens-servico',
-    loadComponent: () => import('./features/ordens-servico/pages/os-lista-page/os-lista-page.component').then(m => m.OsListaPageComponent),
+    redirectTo: 'ordens-servico/fila',
+    pathMatch: 'full'
+  },
+  {
+    path: 'orcamentos/novo',
+    loadComponent: () => import('./features/orcamento/pages/orcamento-page/orcamento-page.component').then(m => m.OrcamentoPageComponent),
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['Atendente', 'Administrador'] }
+  },
+  {
+    path: 'pagamentos/:id',
+    loadComponent: () => import('./features/pagamento/pages/pagamento-page/pagamento-page.component').then(m => m.PagamentoPageComponent),
     canActivate: [authGuard]
+  },
+  {
+    path: 'pagamentos',
+    loadComponent: () => import('./features/pagamento/pages/pagamento-page/pagamento-page.component').then(m => m.PagamentoPageComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: 'fila-execucao',
+    loadComponent: () => import('./features/execucao/pages/fila-execucao-page/fila-execucao-page.component').then(m => m.FilaExecucaoPageComponent),
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['Mecanico', 'Administrador'] }
+  },
+  {
+    path: 'sagas',
+    loadComponent: () => import('./features/sagas/pages/sagas-page/sagas-page.component').then(m => m.SagasPageComponent),
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ['Administrador'] }
   },
   {
     path: 'clientes',
@@ -47,7 +81,7 @@ export const routes: Routes = [
     path: 'insumos',
     loadComponent: () => import('./features/insumos/pages/insumos-page/insumos-page.component').then(m => m.InsumosPageComponent),
     canActivate: [authGuard, roleGuard],
-    data: { roles: ['Administrador', 'Mecanico'] }
+    data: { roles: ['Administrador', 'Atendente', 'Mecanico'] }
   },
   {
     path: 'servicos',
@@ -60,16 +94,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/usuarios/pages/usuarios-page/usuarios-page.component').then(m => m.UsuariosPageComponent),
     canActivate: [authGuard, roleGuard],
     data: { roles: ['Administrador'] }
-  },
-  {
-    path: 'dashboard',
-    loadComponent: () => import('./features/dashboard/pages/dashboard-page/dashboard-page.component').then(m => m.DashboardPageComponent),
-    canActivate: [authGuard, roleGuard],
-    data: { roles: ['Administrador'] }
-  },
-  {
-    path: 'consulta-publica',
-    loadComponent: () => import('./features/portal-publico/pages/consulta-publica-page/consulta-publica-page.component').then(m => m.ConsultaPublicaPageComponent)
   },
   {
     path: 'aprovar-orcamento',

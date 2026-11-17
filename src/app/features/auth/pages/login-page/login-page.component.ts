@@ -60,7 +60,7 @@ import { NotificationService } from '../../../../core/ui/notification.service';
         </div>
 
         <div class="login-footer">
-          <a routerLink="/consulta-publica" class="public-link">Página Pública do Cliente &rarr;</a>
+          <a routerLink="/aprovar-orcamento" class="public-link">Aprovação de Orçamento do Cliente &rarr;</a>
         </div>
       </div>
     </div>
@@ -91,14 +91,14 @@ import { NotificationService } from '../../../../core/ui/notification.service';
     .brand-logo {
       width: 50px;
       height: 50px;
-      background: linear-gradient(135deg, #ED145B, #800A30);
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: #ffffff;
       margin: 0 auto 0.75rem;
-      box-shadow: 0 0 20px rgba(237, 20, 91, 0.4);
+      box-shadow: 0 0 20px var(--border-pink);
     }
     .brand-logo svg { width: 28px; height: 28px; }
     .brand-title {
@@ -143,9 +143,9 @@ import { NotificationService } from '../../../../core/ui/notification.service';
       transition: all 0.2s ease;
     }
     .btn-role:hover {
-      background: rgba(237, 20, 91, 0.2);
-      border-color: #ED145B;
-      color: #ED145B;
+      background: var(--border-pink);
+      border-color: var(--primary);
+      color: var(--primary);
     }
     .login-footer {
       margin-top: 1.25rem;
@@ -153,10 +153,10 @@ import { NotificationService } from '../../../../core/ui/notification.service';
     }
     .public-link {
       font-size: 0.85rem;
-      color: #A1A1AA;
+      color: var(--text-muted);
       transition: color 0.2s;
     }
-    .public-link:hover { color: #ED145B; }
+    .public-link:hover { color: var(--primary); }
     .spinner {
       animation: spin 0.8s linear infinite;
     }

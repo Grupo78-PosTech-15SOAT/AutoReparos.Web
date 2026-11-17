@@ -1,0 +1,54 @@
+import { describe, it, expect } from 'vitest';
+import { API_BASE_URL, API_ENDPOINTS } from './api-endpoints';
+
+const ID = '11111111-1111-1111-1111-111111111111';
+
+const ENDPOINTS: [string, string][] = [
+  ['ORDENS_SERVICO.BASE', API_ENDPOINTS.ORDENS_SERVICO.BASE],
+  ['ORDENS_SERVICO.BY_ID', API_ENDPOINTS.ORDENS_SERVICO.BY_ID(ID)],
+  ['ORDENS_SERVICO.CANCELAMENTO', API_ENDPOINTS.ORDENS_SERVICO.CANCELAMENTO(ID)],
+  ['ORCAMENTOS.BASE', API_ENDPOINTS.ORCAMENTOS.BASE],
+  ['ORCAMENTOS.APROVACAO', API_ENDPOINTS.ORCAMENTOS.APROVACAO(ID)],
+  ['PAGAMENTOS.CHECKOUT', API_ENDPOINTS.PAGAMENTOS.CHECKOUT(ID)],
+  ['PAGAMENTOS.REEMBOLSOS', API_ENDPOINTS.PAGAMENTOS.REEMBOLSOS(ID)],
+  ['EXECUCAO.FILA', API_ENDPOINTS.EXECUCAO.FILA],
+  ['EXECUCAO.ETAPAS', API_ENDPOINTS.EXECUCAO.ETAPAS(ID)],
+  ['EXECUCAO.CONCLUSAO', API_ENDPOINTS.EXECUCAO.CONCLUSAO(ID)],
+  ['EXECUCAO.FALHA', API_ENDPOINTS.EXECUCAO.FALHA(ID)],
+  ['EXECUCAO.REEXECUCAO', API_ENDPOINTS.EXECUCAO.REEXECUCAO(ID)],
+  ['SERVICOS.BASE', API_ENDPOINTS.SERVICOS.BASE],
+  ['INSUMOS.BASE', API_ENDPOINTS.INSUMOS.BASE],
+  ['INSUMOS.ENTRADAS', API_ENDPOINTS.INSUMOS.ENTRADAS(ID)],
+  ['SAGAS.BASE', API_ENDPOINTS.SAGAS.BASE],
+  ['SAGAS.BY_ID', API_ENDPOINTS.SAGAS.BY_ID(ID)],
+  ['SAGAS.RETENTAR', API_ENDPOINTS.SAGAS.RETENTAR(ID)],
+  ['CLIENTES.BASE', API_ENDPOINTS.CLIENTES.BASE],
+  ['CLIENTES.BY_ID', API_ENDPOINTS.CLIENTES.BY_ID(ID)],
+  ['VEICULOS.BASE', API_ENDPOINTS.VEICULOS.BASE],
+  ['VEICULOS.BY_ID', API_ENDPOINTS.VEICULOS.BY_ID(ID)],
+  ['USUARIOS.BASE', API_ENDPOINTS.USUARIOS.BASE],
+  ['USUARIOS.BY_ID', API_ENDPOINTS.USUARIOS.BY_ID(ID)],
+];
+
+describe('ApiEndpoints', () => {
+  it.each(ENDPOINTS)('%s começa em API_URL + /api/v1', (_nome, url) => {
+    expect(url.startsWith(`${API_BASE_URL}/api/v1/`)).toBe(true);
+  });
+
+  it.each(ENDPOINTS)('%s não aponta para URL de serviço', (_nome, url) => {
+    const semBase = url.slice(API_BASE_URL.length);
+    expect(semBase.startsWith('/api/v1/')).toBe(true);
+    expect(semBase).not.toMatch(/localhost|:\d{4}/);
+  });
+
+  it('o login do operador é POST /api/auth/login e o do cliente é POST /auth/cliente sob API_URL', () => {
+    expect(API_ENDPOINTS.AUTH.LOGIN).toBe(`${API_BASE_URL}/api/auth/login`);
+    expect(API_ENDPOINTS.AUTH.CLIENTE).toBe(`${API_BASE_URL}/auth/cliente`);
+  });
+
+  it('não contém grupos ou rotas removidas (dashboard, entregar, status manual)', () => {
+    expect(Object.keys(API_ENDPOINTS)).not.toContain('DASHBOARD');
+    expect(Object.keys(API_ENDPOINTS.ORDENS_SERVICO)).not.toContain('ENTREGAR');
+    expect(Object.keys(API_ENDPOINTS.ORDENS_SERVICO)).not.toContain('STATUS');
+  });
+});

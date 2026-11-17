@@ -1,129 +1,84 @@
-export enum StatusOS {
-  Recebida = 1,
-  EmDiagnostico = 2,
-  AguardandoAprovacao = 3,
-  EmExecucao = 4,
-  Finalizada = 5,
-  Entregue = 6
-}
+import { StatusOS } from '../../../shared/utils/status-os.utils';
 
-export interface ItemServicoOS {
-  id?: string;
-  servicoId: string;
-  nomeServico: string;
-  valor: number;
-  concluido?: boolean;
-}
+export type { StatusOS };
 
-export interface ItemInsumoOS {
-  id?: string;
-  insumoId: string;
-  nomeInsumo: string;
-  quantidade: number;
-  valorUnitario: number;
-  valorTotal: number;
-}
-
-export interface ServicoDetalhe {
+export interface OsResumo {
   id: string;
-  servicoId: string;
-  nomeServico?: string;
-  valorCobrado: number;
-  status: string;         // "Pendente" | "EmExecucao" | "Concluido"
-  iniciadoEm?: string;
-  concluidoEm?: string;
+  clienteId?: string;
+  veiculoId?: string;
+  observacao?: string;
+  status: StatusOS;
+  atualizadaEm?: string;
 }
 
-export interface InsumoDetalhe {
-  id: string;
-  insumoId?: string;
-  descricao: string;
-  valorUnitario: number;
-  quantidade: number;
-  valorTotal: number;
-  origem: string;         // "Estoque" | "CompraEspecifica"
+export interface HistoricoStatus {
+  id?: string;
+  ordemServicoId?: string;
+  status: string;
+  em?: string;
+  registradoEm?: string;
 }
 
+/** Resposta de `GET /api/v1/ordens-servico/{id}`. */
 export interface OsDetalhe {
   id: string;
   clienteId: string;
-  clienteNome?: string;
   veiculoId: string;
-  placaVeiculo?: string;
-  modeloVeiculo?: string;
-  status: StatusOS | string | number;
   observacao?: string;
-  valorTotal: number;
-  criadoEm: string;
-  iniciadoEm?: string;
-  finalizadoEm?: string;
-  entregueEm?: string;
-  envioAprovacaoEm?: string;
-  responsavelId?: string;
-  responsavelNome?: string;
-  servicos: ServicoDetalhe[];
-  insumos: InsumoDetalhe[];
-}
-
-export interface OrdemServico {
-  id: string;
-  clienteId: string;
-  clienteNome: string;
-  clienteDocumento?: string;
-  veiculoId: string;
-  placaVeiculo: string;
-  modeloVeiculo: string;
   status: StatusOS;
-  dataAbertura: string;
-  dataPrevisao?: string;
-  dataFinalizacao?: string;
-  observacoesDiagnostico?: string;
-  valorTotal: number;
-  itensServico: ItemServicoOS[];
-  itensInsumo: ItemInsumoOS[];
-  approvalToken?: string;
+  historico: HistoricoStatus[];
 }
 
 export interface CriarOSRequest {
   clienteId: string;
   veiculoId: string;
-  observacoesIniciais?: string;
+  observacao?: string;
 }
 
-export interface AdicionarServicoOSRequest {
-  servicoId: string;
+export interface CancelamentoResposta {
+  ordemServicoId?: string;
+  correlacaoId?: string;
+  status?: string;
+  estado?: string;
 }
 
-export interface AdicionarInsumoOSRequest {
-  insumoId: string;
-  quantidade: number;
+export interface RespostaFilaExecucao {
+  itens: ExecucaoResumo[];
+  restrito?: boolean;
 }
 
-export type KanbanCardType = 'Received' | 'Diagnosis' | 'Approval' | 'Execution' | 'Finished';
+/** Item da fila de execução vinculado à OS (`GET /api/v1/fila-execucao`). */
+export interface ExecucaoResumo {
+  id: string;
+  ordemServicoId?: string;
+  clienteId?: string;
+  veiculoId?: string;
+  status: string;
+  intervencaoRequerida?: boolean;
+  mecanicoId?: string;
+  atualizadaEm?: string;
+}
+
+/** Resumo de Saga retornado por `GET /api/v1/admin/sagas`. */
+export interface SagaAdminResumo {
+  ordemServicoId: string;
+  estado: string;
+  atualizadoEm?: string;
+  orcamentoId?: string;
+}
 
 export interface KanbanCard {
-  $type: KanbanCardType;
   id: string;
-  clienteNome: string;
-  placaVeiculo: string;
-  modeloVeiculo: string;
-  status: string;
-  dataEntrada?: string;
-  mecanicoResponsavel?: string;
-  tempoDiagnostico?: string;
-  valorOrcamento?: number;
-  quantidadeServicos?: number;
-  tempoAguardandoAprovacao?: string;
-  valorAprovado?: number;
-  progressoServicos?: number;
-  valorFinal?: number;
-  dataConclusao?: string;
-  statusEntrega?: string;
-  servicosConcluidos?: number;
-  servicosTotal?: number;
+  status: StatusOS;
+  clienteId?: string;
+  veiculoId?: string;
+  observacao?: string;
+  atualizadaEm?: string;
+  origem?: 'os' | 'execucao' | 'saga';
 }
 
 export interface KanbanColumn {
-  status: string;
+  status: StatusOS;
+  label: string;
   cards: KanbanCard[];
 }

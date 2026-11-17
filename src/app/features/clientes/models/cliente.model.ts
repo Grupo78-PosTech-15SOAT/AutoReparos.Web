@@ -5,6 +5,5 @@ export interface Cliente {
   telefone: string;
   documento: string; // CPF ou CNPJ
   tipoDocumento: 'CPF' | 'CNPJ';
-  endereco?: string;
   dataCadastro?: string;
 }

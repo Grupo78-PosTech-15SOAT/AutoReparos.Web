@@ -2,25 +2,30 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  ElementRef,
   OnInit,
+  computed,
   inject,
   signal,
-  viewChild
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { HttpErrorResponse } from '@angular/common/http';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subject, timer } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
-import { NotificationService } from '../../../../core/ui/notification.service';
+import { catchError, forkJoin, of } from 'rxjs';
+import { AuthService } from '../../../auth/services/auth.service';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
-import { ApprovalKanbanCardComponent } from '../../components/os-card/approval-kanban-card.component';
-import { DiagnosisKanbanCardComponent } from '../../components/os-card/diagnosis-kanban-card.component';
-import { ExecutionKanbanCardComponent } from '../../components/os-card/execution-kanban-card.component';
-import { FinishedKanbanCardComponent } from '../../components/os-card/finished-kanban-card.component';
-import { ReceivedKanbanCardComponent } from '../../components/os-card/received-kanban-card.component';
-import { OsDrawerComponent } from '../../components/os-drawer/os-drawer.component';
-import { KanbanCard, KanbanColumn } from '../../models/ordem-servico.model';
+import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
+import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
+import { AlertBannerComponent } from '../../../../shared/components/alert-banner/alert-banner.component';
+import { STATUS_OS, STATUS_OS_MAP, StatusOS } from '../../../../shared/utils/status-os.utils';
+import {
+  ExecucaoResumo,
+  KanbanCard,
+  KanbanColumn,
+  OsDetalhe,
+  SagaAdminResumo,
+} from '../../models/ordem-servico.model';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
 
 @Component({
@@ -28,782 +33,389 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    
+    FormsModule,
     RouterLink,
-    ReceivedKanbanCardComponent,
-    DiagnosisKanbanCardComponent,
-    ApprovalKanbanCardComponent,
-    ExecutionKanbanCardComponent,
-    FinishedKanbanCardComponent,
     PageContainerComponent,
-    OsDrawerComponent,
+    StatusBadgeComponent,
+    IdBadgeComponent,
+    AlertBannerComponent,
   ],
   template: `
     <app-page-container type="kanban">
       <div class="page-header" style="margin-bottom: 1.25rem;">
         <div>
-          <h1 class="page-title" style="display: flex; align-items: center; gap: 0.6rem;">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--primary)"
-              stroke-width="2.3"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M9 3v18" />
-              <path d="M15 3v18" />
-            </svg>
-            Fila Kanban
-          </h1>
-          @switch (statusConexao()) {
-            @case ('conectando') {
-              <div class="sync-badge connecting-badge">
-                <span class="connecting-dot"></span>
-                <span>Conectando...</span>
-              </div>
-            }
-            @case ('ao-vivo') {
-              <div class="sync-badge">
-                <span class="pulse-dot"></span>
-                <span>Ao vivo</span>
-                @if (ultimaAtualizacao()) {
-                  <span style="color: #A1A1AA;">• {{ ultimaAtualizacao() }}</span>
-                }
-              </div>
-            }
-            @case ('sem-comunicacao') {
-              <div class="sync-badge error-badge">
-                <span class="error-dot"></span>
-                <span>Sem comunicação</span>
-              </div>
-            }
-          }
+          <h1 class="page-title">Fila Kanban</h1>
+          <p class="page-subtitle">Acompanhamento das 7 etapas reais da Ordem de Serviço</p>
         </div>
-        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-          @if (statusConexao() === 'sem-comunicacao') {
-            <button (click)="tentarNovamente()" class="btn btn-retry">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              >
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-              Tentar novamente
+        <div class="header-actions">
+          <form (ngSubmit)="buscarPorCodigo()" class="busca-codigo-form">
+            <input
+              type="text"
+              [(ngModel)]="codigoBusca"
+              name="codigoBusca"
+              placeholder="Buscar OS por código (ID)..."
+              aria-label="Código da OS"
+              class="form-control busca-input"
+            />
+            <button
+              type="submit"
+              class="btn btn-secondary"
+              [disabled]="buscandoCodigo() || !codigoBusca.trim()"
+            >
+              {{ buscandoCodigo() ? 'Buscando...' : 'Buscar por código' }}
             </button>
-          }
-          <a routerLink="/ordens-servico/nova" class="btn btn-primary"> + Nova OS </a>
+          </form>
+          <button type="button" (click)="carregarQuadro()" class="btn btn-secondary">
+            Atualizar
+          </button>
+          <a routerLink="/ordens-servico/nova" class="btn btn-primary">+ Nova OS</a>
         </div>
       </div>
 
-      <!-- Kanban Board Layout -->
-      @if (statusConexao() === 'sem-comunicacao') {
-        <div class="comunicacao-erro-container">
-          <div class="erro-icon-container">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#EF4444"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-          </div>
-          <h2 class="erro-titulo">Sem Comunicação com o Servidor</h2>
-          <p class="erro-subtitulo">
-            Não foi possível carregar as ordens de serviço. Verifique a conexão com a API do
-            sistema.
-          </p>
-          <button (click)="tentarNovamente()" class="btn btn-retry btn-large">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              style="margin-right: 8px;"
-            >
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
-            Tentar Conectar Novamente
-          </button>
-        </div>
-      } @else if (statusConexao() === 'conectando') {
-        <div class="comunicacao-loading-container">
-          <div class="large-spinner"></div>
-          <span class="loading-text">Conectando ao painel...</span>
-        </div>
-      } @else {
-        <div
-          class="kanban-wrapper"
-          #kanbanWrapper
-          (scroll)="onScroll()"
-          [class.at-start]="isAtStart()"
-          [class.at-end]="isAtEnd()"
-          [class.no-scroll]="statusConexao() !== 'ao-vivo'"
-        >
-          <div class="kanban-board table-loading-container">
-            @if (loading()) {
-              <div class="table-loading-overlay">
-                <div class="table-loading-spinner"></div>
-                <span class="table-loading-text">Carregando fila...</span>
-              </div>
-            }
+      @if (erroBusca(); as msg) {
+        <p class="erro-busca" role="alert">{{ msg }}</p>
+      }
 
-            @for (col of colunas(); track col.status) {
-              <div class="kanban-column">
-                <div
-                  class="column-header"
-                  [class]="getColumnBorderClass(col.status) + ' ' + getColumnGlowClass(col.status)"
-                >
-                  <span class="column-title">
-                    {{ getColumnTitle(col.status) }}
-                  </span>
-                  <span class="column-count">
-                    {{ col.cards.length }}
-                  </span>
-                </div>
-
-                <div class="column-cards">
-                  @for (card of col.cards; track card.id) {
-                    @switch (card.$type) {
-                      @case ('Received') {
-                        <app-received-kanban-card
-                          [card]="card"
-                          (cardClick)="abrirDrawer($event)"
-                        ></app-received-kanban-card>
-                      }
-                      @case ('Diagnosis') {
-                        <app-diagnosis-kanban-card
-                          [card]="card"
-                          (cardClick)="abrirDrawer($event)"
-                        ></app-diagnosis-kanban-card>
-                      }
-                      @case ('Approval') {
-                        <app-approval-kanban-card
-                          [card]="card"
-                          (cardClick)="abrirDrawer($event)"
-                        ></app-approval-kanban-card>
-                      }
-                      @case ('Execution') {
-                        <app-execution-kanban-card
-                          [card]="card"
-                          (cardClick)="abrirDrawer($event)"
-                        ></app-execution-kanban-card>
-                      }
-                      @case ('Finished') {
-                        <app-finished-kanban-card
-                          [card]="card"
-                          (cardClick)="abrirDrawer($event)"
-                        ></app-finished-kanban-card>
-                      }
-                    }
-                  } @empty {
-                    <div class="empty-column">Nenhuma OS nesta etapa</div>
-                  }
-                </div>
-              </div>
-            }
-          </div>
+      @if (acessoExecucaoRestrito()) {
+        <div data-testid="aviso-execucao-restrita" style="margin-bottom: 1rem;">
+          <app-alert-banner tipo="info">
+            Sem acesso à fila de execução: seu perfil não possui permissão para visualizar o andamento operacional na oficina.
+          </app-alert-banner>
         </div>
       }
 
-      <app-os-drawer
-        [isOpen]="drawerOpen()"
-        [osId]="drawerOsId()"
-        [cardPreview]="drawerCard()"
-        (closed)="fecharDrawer()"
-      >
-      </app-os-drawer>
+      @if (erroFila(); as msg) {
+        <app-alert-banner tipo="erro" data-testid="aviso-erro-fila" style="margin-bottom: 1rem;">
+          {{ msg }}
+        </app-alert-banner>
+      }
+
+      @if (carregando()) {
+        <div class="loading-banner" role="status">Carregando fila...</div>
+      }
+
+      <div class="kanban-wrapper">
+        <div class="kanban-board">
+          @for (col of colunas(); track col.status) {
+            <section
+              class="kanban-column"
+              [attr.data-status]="col.status"
+              [attr.aria-label]="col.label"
+            >
+              <header class="column-header">
+                <div>
+                  <span class="column-title">{{ col.label }}</span>
+                  <span class="column-status-code">{{ col.status }}</span>
+                </div>
+                <span class="column-count">{{ col.cards.length }}</span>
+              </header>
+
+              <div class="column-cards">
+                @for (card of col.cards; track card.id) {
+                  <article class="kanban-card">
+                    <div class="card-top">
+                      <app-id-badge [text]="'#' + card.id.slice(0, 8)" size="sm"></app-id-badge>
+                      <app-status-badge [status]="card.status" size="sm"></app-status-badge>
+                    </div>
+                    @if (card.observacao) {
+                      <p class="card-obs">{{ card.observacao }}</p>
+                    }
+                    <a [routerLink]="['/ordens-servico', card.id]" class="card-link">
+                      Ver detalhe
+                    </a>
+                  </article>
+                } @empty {
+                  <div class="empty-column">Nenhuma OS nesta etapa</div>
+                }
+              </div>
+            </section>
+          }
+        </div>
+      </div>
     </app-page-container>
   `,
   styles: [
     `
-      .sync-badge {
-        display: inline-flex;
+      .header-actions {
+        display: flex;
+        gap: 0.75rem;
         align-items: center;
+        flex-wrap: wrap;
+      }
+      .busca-codigo-form {
+        display: flex;
         gap: 0.5rem;
-        font-size: 0.75rem;
-        color: #10b981;
-        background: rgba(16, 185, 129, 0.1);
-        border: 1px solid rgba(16, 185, 129, 0.25);
-        padding: 0.25rem 0.65rem;
-        border-radius: 999px;
-        margin-top: 0.5rem;
-        font-weight: 600;
-      }
-      .pulse-dot {
-        width: 7px;
-        height: 7px;
-        background: #10b981;
-        border-radius: 50%;
-        box-shadow: 0 0 8px #10b981;
-        animation: pulse 2s infinite;
-      }
-      @keyframes pulse {
-        0% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-        }
-        70% {
-          transform: scale(1);
-          box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
-        }
-        100% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-        }
-      }
-      .error-badge {
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.1);
-        border-color: rgba(239, 68, 68, 0.3);
-      }
-      .error-dot {
-        width: 7px;
-        height: 7px;
-        background: #ef4444;
-        border-radius: 50%;
-        box-shadow: 0 0 8px #ef4444;
-        animation: pulse-error 2s infinite;
-      }
-      @keyframes pulse-error {
-        0% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-        }
-        70% {
-          transform: scale(1);
-          box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
-        }
-        100% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-        }
-      }
-      .connecting-badge {
-        color: #f59e0b;
-        background: rgba(245, 158, 11, 0.1);
-        border-color: rgba(245, 158, 11, 0.3);
-      }
-      .connecting-dot {
-        width: 7px;
-        height: 7px;
-        background: #f59e0b;
-        border-radius: 50%;
-        box-shadow: 0 0 8px #f59e0b;
-        animation: pulse-connecting 2s infinite;
-      }
-      @keyframes pulse-connecting {
-        0% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
-        }
-        70% {
-          transform: scale(1);
-          box-shadow: 0 0 0 6px rgba(245, 158, 11, 0);
-        }
-        100% {
-          transform: scale(0.95);
-          box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
-        }
-      }
-      .btn-retry {
-        display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        font-size: 0.875rem;
-        font-weight: 700;
+      }
+      .busca-input {
+        min-width: 220px;
+      }
+      .erro-busca {
+        color: var(--primary);
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+      }
+      .loading-banner {
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
         border-radius: 8px;
-        border: 1px solid rgba(239, 68, 68, 0.5);
-        background: rgba(239, 68, 68, 0.1);
-        color: #ef4444;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--status-recebida);
+        font-size: 0.9rem;
       }
-      .btn-retry:hover {
-        background: rgba(239, 68, 68, 0.2);
-        border-color: #ef4444;
-      }
-
       .kanban-wrapper {
         flex: 1;
-        min-height: 0;
         width: 100%;
         overflow-x: auto;
-        overflow-y: hidden;
-        display: flex;
-        flex-direction: column;
         padding-bottom: 0.5rem;
-        
-        --mask-left: transparent;
-        --mask-right: transparent;
-
-        mask-image:
-          linear-gradient(to right, var(--mask-left), #000 24px, #000 calc(100% - 24px), var(--mask-right)),
-          linear-gradient(to top, #000, #000);
-        mask-size:
-          100% calc(100% - 16px),
-          100% 16px;
-        mask-position:
-          top left,
-          bottom left;
-        mask-repeat: no-repeat, no-repeat;
-        
-        -webkit-mask-image:
-          linear-gradient(to right, var(--mask-left), #000 24px, #000 calc(100% - 24px), var(--mask-right)),
-          linear-gradient(to top, #000, #000);
-        -webkit-mask-size:
-          100% calc(100% - 16px),
-          100% 16px;
-        -webkit-mask-position:
-          top left,
-          bottom left;
-        -webkit-mask-repeat: no-repeat, no-repeat;
       }
-      .kanban-wrapper.at-start {
-        --mask-left: #000;
-      }
-      .kanban-wrapper.at-end {
-        --mask-right: #000;
-      }
-      .kanban-wrapper::-webkit-scrollbar {
-        height: 6px;
-      }
-      .kanban-wrapper::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .kanban-wrapper::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 3px;
-      }
-      .kanban-wrapper::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.3);
-      }
-
       .kanban-board {
         display: grid;
-        grid-template-columns: repeat(5, minmax(290px, 1fr));
-        gap: 1.25rem;
-        flex: 1;
-        min-height: 0;
-        width: 100%;
-        min-width: 1550px;
+        grid-template-columns: repeat(7, minmax(250px, 1fr));
+        gap: 1rem;
+        min-width: 1800px;
       }
-
       .kanban-column {
         display: flex;
         flex-direction: column;
         background: var(--bg-surface);
-        backdrop-filter: var(--glass-blur);
         border: 1px solid var(--border-color);
         border-radius: 12px;
-        padding: 1rem;
-        height: 100%;
-        min-height: 0;
-        box-sizing: border-box;
-        overflow: hidden;
-        transition:
-          border-color 0.2s ease,
-          background-color 0.2s ease;
+        padding: 0.9rem;
+        min-height: 320px;
       }
-      .active-column {
-        border-color: rgba(249, 115, 22, 0.3);
-        background: rgba(249, 115, 22, 0.02);
-      }
-
       .column-header {
-        background: transparent;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0.5rem 0.6rem 0.75rem 0.65rem;
-        border-bottom: 2px solid #3b82f6;
-        margin-bottom: 1rem;
-        box-sizing: border-box;
-        transition:
-          border-color 0.3s ease,
-          box-shadow 0.3s ease;
-        position: relative;
-        z-index: 0;
+        padding-bottom: 0.65rem;
+        margin-bottom: 0.85rem;
+        border-bottom: 2px solid rgba(237, 20, 91, 0.45);
       }
-      .status-recebida-border {
-        border-bottom-color: #3b82f6;
-      }
-      .status-diagnostico-border {
-        border-bottom-color: #f59e0b;
-      }
-      .status-aguardando-border {
-        border-bottom-color: #8b5cf6;
-      }
-      .status-execucao-border {
-        border-bottom-color: #f97316;
-      }
-      .status-finalizada-border {
-        border-bottom-color: #10b981;
-      }
-      .no-scroll {
-        overflow-x: hidden !important;
-      }
-      .column-header.glow-recebida,
-      .column-header.glow-diagnostico,
-      .column-header.glow-aguardando,
-      .column-header.glow-execucao,
-      .column-header.glow-finalizada {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
-      }
-      .column-header.glow-recebida {
-        box-shadow: 0 0 10px rgba(59, 130, 246, 0.35);
-      }
-      .column-header.glow-diagnostico {
-        box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
-      }
-      .column-header.glow-aguardando {
-        box-shadow: 0 0 10px rgba(139, 92, 246, 0.35);
-      }
-      .column-header.glow-execucao {
-        box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
-      }
-      .column-header.glow-finalizada {
-        box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
-      }
-
       .column-title {
-        font-family: var(--font-display);
+        display: block;
         font-weight: 700;
-        font-size: 0.92rem;
+        font-size: 0.9rem;
         color: var(--text-main);
-        display: flex;
-        align-items: center;
-        padding-left: 0.25rem;
-        line-height: 1.2;
-        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .column-status-code {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--text-subtle);
       }
       .column-count {
         background: rgba(255, 255, 255, 0.08);
         color: var(--text-muted);
-        padding: 0.2rem 0.6rem;
+        padding: 0.2rem 0.55rem;
         border-radius: 999px;
-        font-size: 0.72rem;
+        font-size: 0.75rem;
         font-weight: 700;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
       }
-
       .column-cards {
         display: flex;
         flex-direction: column;
-        gap: 0.85rem;
-        overflow-y: auto;
+        gap: 0.75rem;
         flex: 1;
-        padding-top: 0.5rem;
-        padding-right: 0.25rem;
-        min-height: 0;
-        position: relative;
-        z-index: 1;
       }
-      .column-cards::-webkit-scrollbar {
-        width: 4px;
+      .kanban-card {
+        background: rgba(24, 24, 28, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 0.85rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
       }
-      .column-cards::-webkit-scrollbar-track {
-        background: transparent;
+      .card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
       }
-      .column-cards::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.12);
-        border-radius: 2px;
+      .card-obs {
+        margin: 0;
+        font-size: 0.82rem;
+        color: var(--text-muted);
       }
-      .column-cards::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.24);
+      .card-link {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--primary);
+        text-decoration: none;
       }
-
-      /* Column Hover Specific header glows */
-      .kanban-column:hover .status-recebida-border {
-        border-bottom-color: #3b82f6;
-        box-shadow: 0 3px 10px rgba(59, 130, 246, 0.25);
-      }
-      .kanban-column:hover .status-diagnostico-border {
-        border-bottom-color: #f59e0b;
-        box-shadow: 0 3px 10px rgba(245, 158, 11, 0.25);
-      }
-      .kanban-column:hover .status-aguardando-border {
-        border-bottom-color: #8b5cf6;
-        box-shadow: 0 3px 10px rgba(139, 92, 246, 0.25);
-      }
-      .kanban-column:hover .status-execucao-border {
-        border-bottom-color: #f97316;
-        box-shadow: 0 3px 10px rgba(249, 115, 22, 0.25);
-      }
-      .kanban-column:hover .status-finalizada-border {
-        border-bottom-color: #10b981;
-        box-shadow: 0 3px 10px rgba(16, 185, 129, 0.25);
-      }
-
-      /* Acender a borda da coluna inteira com a sua cor correspondente no hover */
-      .kanban-column:hover:has(.status-recebida-border) {
-        border-color: rgba(59, 130, 246, 0.25);
-      }
-      .kanban-column:hover:has(.status-diagnostico-border) {
-        border-color: rgba(245, 158, 11, 0.25);
-      }
-      .kanban-column:hover:has(.status-aguardando-border) {
-        border-color: rgba(139, 92, 246, 0.25);
-      }
-      .kanban-column:hover:has(.status-execucao-border) {
-        border-color: rgba(249, 115, 22, 0.4);
-      }
-      .kanban-column:hover:has(.status-finalizada-border) {
-        border-color: rgba(16, 185, 129, 0.25);
-      }
-
-      /* Column Hover Header Glows */
-      .kanban-column:hover .column-header.glow-recebida {
-        background: rgba(59, 130, 246, 0.08);
-        box-shadow: 0 0 14px rgba(59, 130, 246, 0.45);
-      }
-      .kanban-column:hover .column-header.glow-diagnostico {
-        background: rgba(245, 158, 11, 0.08);
-        box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
-      }
-      .kanban-column:hover .column-header.glow-aguardando {
-        background: rgba(139, 92, 246, 0.08);
-        box-shadow: 0 0 14px rgba(139, 92, 246, 0.45);
-      }
-      .kanban-column:hover .column-header.glow-execucao {
-        background: rgba(249, 115, 22, 0.1);
-        box-shadow: 0 0 14px rgba(249, 115, 22, 0.5);
-      }
-      .kanban-column:hover .column-header.glow-finalizada {
-        background: rgba(16, 185, 129, 0.08);
-        box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
-      }
-
-      /* Smooth scale for column title on hover (does not affect cards layout) */
-      .kanban-column:hover .column-header .column-title {
-        transform: scale(1.05);
-      }
-
       .empty-column {
         text-align: center;
-        padding: 2.25rem 1rem;
+        padding: 2rem 0.75rem;
         font-size: 0.78rem;
-        color: #52525b;
+        color: var(--text-subtle);
         border: 1px dashed rgba(255, 255, 255, 0.06);
         border-radius: 8px;
-        background: rgba(0, 0, 0, 0.08);
-      }
-
-      /* Tela de Erro de Conexao Premium */
-      .comunicacao-erro-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        padding: 3rem;
-        background: rgba(24, 24, 28, 0.6);
-        backdrop-filter: blur(16px);
-        border: 1px solid rgba(239, 68, 68, 0.15);
-        border-radius: 12px;
-        margin-top: 1.5rem;
-        flex: 1;
-        min-height: 350px;
-      }
-      .erro-icon-container {
-        margin-bottom: 1.25rem;
-        animation: pulse-error-icon 2s infinite ease-in-out;
-      }
-      @keyframes pulse-error-icon {
-        0%,
-        100% {
-          transform: scale(1);
-          filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.2));
-        }
-        50% {
-          transform: scale(1.05);
-          filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.5));
-        }
-      }
-      .erro-titulo {
-        font-family: 'Outfit', sans-serif;
-        font-weight: 700;
-        font-size: 1.35rem;
-        color: #f8fafc;
-        margin-bottom: 0.5rem;
-      }
-      .erro-subtitulo {
-        font-size: 0.9rem;
-        color: #94a3b8;
-        max-width: 420px;
-        margin-bottom: 1.5rem;
-        line-height: 1.5;
-      }
-      .btn-large {
-        padding: 0.65rem 1.5rem;
-        font-size: 0.88rem;
-      }
-
-      /* Tela de Loading de Conexao */
-      .comunicacao-loading-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 1.25rem;
-        padding: 4rem;
-        flex: 1;
-        min-height: 350px;
-      }
-      .large-spinner {
-        width: 44px;
-        height: 44px;
-        border: 3px solid rgba(237, 20, 91, 0.1);
-        border-radius: 50%;
-        border-top-color: #ed145b;
-        animation: spin 1s ease-in-out infinite;
-      }
-      .loading-text {
-        font-family: 'Outfit', sans-serif;
-        font-size: 0.95rem;
-        color: #a1a1aa;
-        font-weight: 500;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
       }
     `,
   ],
 })
 export class OsKanbanPageComponent implements OnInit {
-  private readonly kanbanWrapperElement = viewChild<ElementRef<HTMLElement>>('kanbanWrapper');
-
-  isAtStart = signal(true);
-  isAtEnd = signal(false);
-
-  colunas = signal<KanbanColumn[]>([]);
-  loading = signal(false);
-  statusConexao = signal<'conectando' | 'ao-vivo' | 'sem-comunicacao'>('conectando');
-  ultimaAtualizacao = signal<string>('');
-
-  drawerOsId = signal<string | null>(null);
-  drawerCard = signal<KanbanCard | null>(null);
-  drawerOpen = signal(false);
-
   private readonly destroyRef = inject(DestroyRef);
   private readonly osService = inject(OrdemServicoService);
-  private readonly notification = inject(NotificationService);
+  private readonly auth = inject(AuthService);
+  private readonly osJornadaStore = inject(OsJornadaStore);
 
-  /** Subject usado para cancelar o polling anterior antes de criar um novo (B4). */
-  private readonly stopPolling$ = new Subject<void>();
+  codigoBusca = '';
+  readonly carregando = signal(false);
+  readonly buscandoCodigo = signal(false);
+  readonly erroBusca = signal<string | null>(null);
+  readonly acessoExecucaoRestrito = signal(false);
+  readonly erroFila = signal<string | null>(null);
+  readonly cartoesPorId = signal<Record<string, KanbanCard>>({});
+
+  readonly colunas = computed<KanbanColumn[]>(() => {
+    const todos = Object.values(this.cartoesPorId());
+    return STATUS_OS.map(status => ({
+      status,
+      label: STATUS_OS_MAP[status].label,
+      cards: todos.filter(c => c.status === status),
+    }));
+  });
 
   ngOnInit(): void {
-    this.iniciarPolling();
+    this.carregarQuadro();
   }
 
-  onScroll(): void {
-    this.checkScroll();
-  }
+  carregarQuadro(): void {
+    this.carregando.set(true);
+    this.erroFila.set(null);
 
-  checkScroll(): void {
-    const el = this.kanbanWrapperElement()?.nativeElement;
-    if (el) {
-      const tolerance = 5;
-      this.isAtStart.set(el.scrollLeft <= tolerance);
-      this.isAtEnd.set(el.scrollLeft + el.clientWidth >= el.scrollWidth - tolerance);
-    }
-  }
-
-  private iniciarPolling(): void {
-    this.stopPolling$.next(); // cancela a subscription anterior antes de criar nova
-    timer(0, 10000)
+    const fila$ = this.osService
+      .listarFilaExecucao()
       .pipe(
-        takeUntil(this.stopPolling$),
-        takeUntilDestroyed(this.destroyRef)
-      )
-      .subscribe(() => this.carregarFila());
+        catchError((err: HttpErrorResponse) => {
+          if (err?.status !== 403) {
+            this.erroFila.set('Não foi possível carregar a fila de execução.');
+          }
+          return of({ itens: [] as ExecucaoResumo[], restrito: err?.status === 403 });
+        })
+      );
+
+    const sagas$ = this.auth.hasRole(['Administrador'])
+      ? this.osService.listarSagasAdmin().pipe(catchError(() => of([] as SagaAdminResumo[])))
+      : of([] as SagaAdminResumo[]);
+
+    const idsAtalho = Array.from(new Set(this.osJornadaStore.registros().map(r => r.osId).filter(Boolean)));
+    const atalhos$ = idsAtalho.length > 0
+      ? forkJoin(idsAtalho.map(id => this.osService.obter(id).pipe(catchError(() => of(null)))))
+      : of([] as (OsDetalhe | null)[]);
+
+    forkJoin({ fila: fila$, sagas: sagas$, atalhos: atalhos$ })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(({ fila, sagas, atalhos }) => {
+        this.acessoExecucaoRestrito.set(!!fila.restrito);
+        const atual = { ...this.cartoesPorId() };
+
+        for (const saga of sagas) {
+          const osId = saga.ordemServicoId;
+          if (!osId) continue;
+          atual[osId] = {
+            ...atual[osId],
+            id: osId,
+            status: this.mapearStatusParaColuna(saga.estado),
+            atualizadaEm: saga.atualizadoEm,
+            origem: 'saga',
+          };
+        }
+
+        for (const exec of fila.itens) {
+          const osId = exec.ordemServicoId || exec.id;
+          if (!osId) continue;
+          atual[osId] = {
+            ...atual[osId],
+            id: osId,
+            clienteId: exec.clienteId ?? atual[osId]?.clienteId,
+            veiculoId: exec.veiculoId ?? atual[osId]?.veiculoId,
+            status: this.mapearStatusParaColuna(exec.status, exec.intervencaoRequerida),
+            atualizadaEm: exec.atualizadaEm ?? atual[osId]?.atualizadaEm,
+            origem: 'execucao',
+          };
+        }
+
+        for (const os of atalhos) {
+          if (!os) continue;
+          atual[os.id] = {
+            ...atual[os.id],
+            id: os.id,
+            clienteId: os.clienteId ?? atual[os.id]?.clienteId,
+            veiculoId: os.veiculoId ?? atual[os.id]?.veiculoId,
+            observacao: os.observacao ?? atual[os.id]?.observacao,
+            status: this.mapearStatusParaColuna(os.status),
+            origem: 'os',
+          };
+        }
+
+        this.cartoesPorId.set(atual);
+        this.carregando.set(false);
+      });
   }
 
-  tentarNovamente(): void {
-    this.statusConexao.set('conectando');
-    this.iniciarPolling();
+  buscarPorCodigo(): void {
+    const codigo = this.codigoBusca.trim();
+    if (!codigo) return;
+
+    this.buscandoCodigo.set(true);
+    this.erroBusca.set(null);
+    this.osService
+      .obter(codigo)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: os => {
+          this.incluirOuAtualizarCartao({
+            id: os.id,
+            status: this.mapearStatusParaColuna(os.status),
+            clienteId: os.clienteId,
+            veiculoId: os.veiculoId,
+            observacao: os.observacao,
+            origem: 'os',
+          });
+          this.buscandoCodigo.set(false);
+        },
+        error: () => {
+          this.erroBusca.set('OS não encontrada para o código informado.');
+          this.buscandoCodigo.set(false);
+        },
+      });
   }
 
-  private carregarFila(callback?: () => void): void {
-    const isFirstConnection = this.statusConexao() === 'conectando';
-    if (isFirstConnection) {
-      this.loading.set(true);
+  incluirOuAtualizarCartao(card: KanbanCard): void {
+    this.cartoesPorId.update(atual => ({
+      ...atual,
+      [card.id]: card,
+    }));
+  }
+
+  mapearStatusParaColuna(statusBruto: string, intervencaoRequerida?: boolean): StatusOS {
+    if (intervencaoRequerida) {
+      return 'IntervencaoRequerida';
     }
-    this.osService.getFilaKanban(1, 1000).subscribe({
-      next: (res) => {
-        this.statusConexao.set('ao-vivo');
-        this.colunas.set(res || []);
-        this.ultimaAtualizacao.set(new Date().toLocaleTimeString('pt-BR'));
-        this.loading.set(false);
-        if (callback) callback();
-        this.checkScroll();
-      },
-      error: () => {
-        this.statusConexao.set('sem-comunicacao');
-        this.loading.set(false);
-        if (callback) callback();
-        this.checkScroll();
-      },
-    });
-  }
-
-  // S1: mapa único substituindo 3 métodos switch no mesmo enum (Repeated Switches smell)
-  private readonly COLUMN_META: Record<string, { title: string; borderClass: string; glowClass: string }> = {
-    Recebida:    { title: 'Recebidas',         borderClass: 'status-recebida-border',    glowClass: 'glow-recebida'    },
-    Diagnostico: { title: 'Em Diagnóstico',    borderClass: 'status-diagnostico-border', glowClass: 'glow-diagnostico' },
-    Aprovacao:   { title: 'Aprovação',         borderClass: 'status-aguardando-border',  glowClass: 'glow-aguardando'  },
-    Execucao:    { title: 'Em Execução',       borderClass: 'status-execucao-border',    glowClass: 'glow-execucao'    },
-    Finalizada:  { title: 'Finalizadas Hoje',  borderClass: 'status-finalizada-border',  glowClass: 'glow-finalizada'  },
-  };
-
-  getColumnTitle(status: string): string {
-    return this.COLUMN_META[status]?.title ?? status;
-  }
-
-  getColumnBorderClass(status: string): string {
-    return this.COLUMN_META[status]?.borderClass ?? '';
-  }
-
-  getColumnGlowClass(status: string): string {
-    return this.COLUMN_META[status]?.glowClass ?? '';
-  }
-
-  abrirDrawer(card: KanbanCard): void {
-    this.drawerOsId.set(card.id);
-    this.drawerCard.set(card);
-    this.drawerOpen.set(true);
-  }
-
-  fecharDrawer(): void {
-    this.drawerOpen.set(false);
-    this.drawerOsId.set(null);
-    this.drawerCard.set(null);
+    if ((STATUS_OS as readonly string[]).includes(statusBruto)) {
+      return statusBruto as StatusOS;
+    }
+    switch (statusBruto) {
+      case 'ReservandoInsumos':
+      case 'AguardandoInsumos':
+        return 'OrcamentoAprovado';
+      case 'Fila':
+      case 'ExecucaoLiberada':
+        return 'EmExecucao';
+      case 'ExecucaoConcluida':
+        return 'Concluida';
+      case 'PagamentoCapturado':
+        return 'Paga';
+      case 'Falhou':
+      case 'CompensacaoFalhou':
+        return 'IntervencaoRequerida';
+      case 'Compensando':
+      case 'Compensada':
+        return 'Cancelada';
+      default:
+        return 'Recebida';
+    }
   }
 }

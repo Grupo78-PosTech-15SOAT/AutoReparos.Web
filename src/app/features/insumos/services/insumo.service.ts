@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
-import { Insumo } from '../models/insumo.model';
+import { Insumo, RegistrarEntradaInsumoRequest, normalizarInsumo } from '../models/insumo.model';
 import { API_ENDPOINTS } from '../../../core/config/api-endpoints';
 import { PagedResult } from '../../../shared/models/pagination.model';
 
@@ -11,43 +11,63 @@ import { PagedResult } from '../../../shared/models/pagination.model';
 export class InsumoService {
   private readonly http = inject(HttpClient);
 
-  getAll(pageNumber = 1, pageSize = 10): Observable<PagedResult<Insumo>> {
-    const params = new HttpParams()
-      .set('pageNumber', pageNumber.toString())
-      .set('pageSize', pageSize.toString());
-
-    return this.http.get<any>(API_ENDPOINTS.INSUMOS.BASE, { params }).pipe(
-      map(res => this.normalizePagedResult(res, pageNumber, pageSize))
+  listar(): Observable<Insumo[]> {
+    return this.http.get<unknown>(API_ENDPOINTS.INSUMOS.BASE).pipe(
+      map(res => this.extrairItens(res).map(normalizarInsumo))
     );
   }
 
-  getById(id: string): Observable<Insumo> {
-    return this.http.get<Insumo>(API_ENDPOINTS.INSUMOS.BY_ID(id));
+  getAll(pageNumber = 1, pageSize = 10): Observable<PagedResult<Insumo>> {
+    return this.listar().pipe(
+      map(items => ({
+        items,
+        total: items.length,
+        pageNumber,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(items.length / (pageSize || 1)))
+      }))
+    );
   }
 
-  criar(insumo: Insumo): Observable<Insumo> {
-    return this.http.post<Insumo>(API_ENDPOINTS.INSUMOS.BASE, insumo);
+  criar(insumo: Partial<Insumo>): Observable<Insumo> {
+    const precoUnitario = Number(insumo.precoUnitario ?? insumo.valor ?? 0);
+    const quantidadeInicial = Number(insumo.quantidadeInicial ?? insumo.saldoDisponivel ?? insumo.quantidadeEstoque ?? 0);
+    const desc = insumo.descricao?.trim();
+    const payload: Record<string, unknown> = {
+      nome: insumo.nome ?? '',
+      precoUnitario,
+      quantidadeInicial,
+      quantidadeDisponivel: quantidadeInicial,
+      saldoDisponivel: quantidadeInicial,
+    };
+    if (desc) {
+      payload['descricao'] = desc;
+    }
+    return this.http.post<Insumo>(API_ENDPOINTS.INSUMOS.BASE, payload).pipe(
+      map(res => normalizarInsumo(res ?? payload))
+    );
   }
 
-  atualizar(id: string, insumo: Insumo): Observable<Insumo> {
-    return this.http.put<Insumo>(API_ENDPOINTS.INSUMOS.BY_ID(id), insumo);
+  registrarEntrada(id: string, entrada: RegistrarEntradaInsumoRequest): Observable<Insumo> {
+    const payload = {
+      quantidade: Number(entrada.quantidade)
+    };
+    return this.http.post<Insumo>(API_ENDPOINTS.INSUMOS.ENTRADAS(id), payload).pipe(
+      map(res => normalizarInsumo(res ?? {}))
+    );
   }
 
-  excluir(id: string): Observable<void> {
-    return this.http.delete<void>(API_ENDPOINTS.INSUMOS.BY_ID(id));
-  }
-
-  private normalizePagedResult(res: any, pageNumber: number, pageSize: number): PagedResult<Insumo> {
-    if (res) {
-      const items = res.items ?? res.Items ?? res.data ?? res.Data ?? (Array.isArray(res) ? res : null);
-      if (Array.isArray(items)) {
-        const total = res.totalItems ?? res.TotalItems ?? res.total ?? res.Total ?? items.length;
-        const pNum = res.pageNumber ?? res.PageNumber ?? pageNumber ?? 1;
-        const pSize = res.pageSize ?? res.PageSize ?? pageSize ?? 10;
-        const totalPages = res.totalPages ?? res.TotalPages ?? Math.max(1, Math.ceil(total / (pSize || 1)));
-        return { items, total, pageNumber: pNum, pageSize: pSize, totalPages };
+  private extrairItens(res: unknown): Partial<Insumo>[] {
+    if (Array.isArray(res)) {
+      return res;
+    }
+    if (res && typeof res === 'object') {
+      const obj = res as Record<string, unknown>;
+      const lista = obj['items'] ?? obj['Items'] ?? obj['itens'] ?? obj['Itens'] ?? obj['data'] ?? obj['Data'];
+      if (Array.isArray(lista)) {
+        return lista as Partial<Insumo>[];
       }
     }
-    return { items: [], total: 0, pageNumber: pageNumber || 1, pageSize: pageSize || 10, totalPages: 1 };
+    return [];
   }
 }

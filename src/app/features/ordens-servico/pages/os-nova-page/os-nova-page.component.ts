@@ -1,5 +1,13 @@
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {  Component, OnInit, inject, ChangeDetectionStrategy, ChangeDetectorRef , DestroyRef } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  inject,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  DestroyRef,
+} from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
@@ -8,13 +16,14 @@ import { VeiculoService } from '../../../veiculos/services/veiculo.service';
 import { Cliente } from '../../../clientes/models/cliente.model';
 import { Veiculo } from '../../../veiculos/models/veiculo.model';
 import { NotificationService } from '../../../../core/ui/notification.service';
-import { MaskDirective } from '../../../../shared/directives/mask.directive';
+import { MENSAGENS_POR_STATUS, mensagemDoCodigo } from '../../../../core/http/error-catalog';
 import {
   CustomSelectComponent,
   SelectOption,
 } from '../../../../shared/components/custom-select/custom-select.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 
 const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
 
@@ -22,114 +31,80 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
   selector: 'app-os-nova-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, MaskDirective, CustomSelectComponent, PageContainerComponent],
+  imports: [FormsModule, CustomSelectComponent, PageContainerComponent],
   template: `
     <app-page-container maxWidth="800px">
-      <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+      <div
+        class="page-header"
+        style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;"
+      >
         <div>
-          <h1 class="page-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ED145B" stroke-width="2.3"><path d="M12 5v14M5 12h14"/></svg>
-            Nova Ordem de Serviço
-          </h1>
+          <h1 class="page-title">Nova Ordem de Serviço</h1>
         </div>
         @if (rascunhoSalvo) {
-          <div class="draft-badge">
-            💾 Rascunho salvo
-          </div>
+          <div class="draft-badge">Rascunho salvo</div>
         }
       </div>
 
-      <!-- Loading Skeleton -->
       @if (loadingDados) {
-        <div class="card-panel">
-          <div class="skeleton-section">
-            <div class="skeleton-label"></div>
-            <div class="skeleton-row">
-              <div class="skeleton-input"></div>
-              <div class="skeleton-input"></div>
-            </div>
-          </div>
-          <div class="skeleton-section" style="margin-top: 1.5rem;">
-            <div class="skeleton-label"></div>
-            <div class="skeleton-row">
-              <div class="skeleton-input"></div>
-              <div class="skeleton-input"></div>
-            </div>
-          </div>
-          <div class="skeleton-section" style="margin-top: 1.5rem;">
-            <div class="skeleton-label"></div>
-            <div class="skeleton-textarea"></div>
-          </div>
-          <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
-            <div class="skeleton-btn"></div>
-            <div class="skeleton-btn"></div>
-          </div>
-        </div>
+        <div class="card-panel" role="status">Carregando clientes e veículos...</div>
       } @else {
         <div class="card-panel">
           <form (ngSubmit)="salvarOS()">
-            <!-- 1. Busca / Seleção do Cliente -->
             <div class="form-section">
               <h3 class="section-heading">1. Cliente</h3>
-              <div class="grid-2">
-                <div class="form-group">
-                  <label class="form-label">Cliente Cadastrado</label>
-                  <app-custom-select
-                    [options]="clienteOptions"
-                    [value]="clienteId"
-                    placeholder="-- Selecione o Cliente --"
-                    (valueChange)="onClienteSelect($event)"
-                  ></app-custom-select>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Filtrar Cliente por CPF/CNPJ</label>
-                  <input type="text" [(ngModel)]="buscaDocumento" name="buscaDocumento" appMask="cpfCnpj" (input)="buscarCliente()" placeholder="Digite CPF ou CNPJ..." class="form-control" />
-                </div>
-              </div>
-            </div>
-
-            <!-- 2. Busca / Seleção do Veículo -->
-            <div class="form-section" style="margin-top: 1.5rem;">
-              <h3 class="section-heading">2. Identificação do Veículo</h3>
-              <div class="grid-2">
-                <div class="form-group">
-                  <label class="form-label">Veículo do Cliente</label>
-                  <app-custom-select
-                    [options]="veiculoOptions"
-                    [value]="veiculoId"
-                    placeholder="-- Selecione o Veículo --"
-                    (valueChange)="onVeiculoSelect($event)"
-                  ></app-custom-select>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Ou Buscar por Placa</label>
-                  <input type="text" [(ngModel)]="buscaPlaca" name="buscaPlaca" appMask="placa" (input)="buscarVeiculoPorPlaca()" placeholder="Ex: BRA2E19" class="form-control" />
-                </div>
-              </div>
-            </div>
-
-            <!-- 3. Observações de Entrada -->
-            <div class="form-section" style="margin-top: 1.5rem;">
-              <h3 class="section-heading">3. Observações Iniciais</h3>
               <div class="form-group">
-                <textarea [(ngModel)]="observacoesIniciais" name="observacoesIniciais" (input)="salvarRascunho()" rows="4" placeholder="Sintomas relatados pelo cliente..." class="form-control"></textarea>
+                <label class="form-label">Cliente Cadastrado</label>
+                <app-custom-select
+                  [options]="clienteOptions"
+                  [value]="clienteId"
+                  placeholder="-- Selecione o Cliente --"
+                  (valueChange)="onClienteSelect($event)"
+                ></app-custom-select>
               </div>
             </div>
 
-            <!-- Ações -->
+            <div class="form-section" style="margin-top: 1.5rem;">
+              <h3 class="section-heading">2. Veículo</h3>
+              <div class="form-group">
+                <label class="form-label">Veículo do Cliente</label>
+                <app-custom-select
+                  [options]="veiculoOptions"
+                  [value]="veiculoId"
+                  placeholder="-- Selecione o Veículo --"
+                  (valueChange)="onVeiculoSelect($event)"
+                ></app-custom-select>
+              </div>
+            </div>
+
+            <div class="form-section" style="margin-top: 1.5rem;">
+              <h3 class="section-heading">3. Observação</h3>
+              <div class="form-group">
+                <label class="form-label" for="observacao-os">Observações iniciais</label>
+                <textarea
+                  id="observacao-os"
+                  [(ngModel)]="observacao"
+                  name="observacao"
+                  (input)="salvarRascunho()"
+                  rows="4"
+                  placeholder="Sintomas relatados pelo cliente..."
+                  class="form-control"
+                ></textarea>
+              </div>
+            </div>
+
+            @if (erroFormulario) {
+              <p class="erro-formulario" role="alert">{{ erroFormulario }}</p>
+            }
+
             <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem;">
               <button type="button" (click)="cancelar()" class="btn btn-secondary">Cancelar</button>
-              <button type="submit" [disabled]="loading || !clienteId || !veiculoId" class="btn btn-primary">
-                @if (loading) {
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation: spin 0.8s linear infinite;">
-                    <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/>
-                  </svg>
-                  Abrindo...
-                } @else {
-                  Abrir OS &rarr;
-                }
+              <button
+                type="submit"
+                [disabled]="loading || !clienteId || !veiculoId"
+                class="btn btn-primary"
+              >
+                {{ loading ? 'Abrindo...' : 'Abrir OS' }}
               </button>
             </div>
           </form>
@@ -137,81 +112,52 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
       }
     </app-page-container>
   `,
-  styles: [`
-    .form-section {
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 1.5rem;
-    }
-    .section-heading {
-      font-family: 'Outfit', sans-serif;
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #ED145B;
-      margin-bottom: 1rem;
-    }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.25rem;
-    }
-    .draft-badge {
-      font-size: 0.75rem;
-      color: #3B82F6;
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 0.3rem 0.75rem;
-      border-radius: 999px;
-      font-weight: 600;
-      margin-top: 0.25rem;
-    }
-
-    /* Skeleton Loading */
-    @keyframes shimmer {
-      0% { background-position: -400px 0; }
-      100% { background-position: 400px 0; }
-    }
-    .skeleton-section { padding-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
-    .skeleton-label {
-      width: 120px; height: 12px; border-radius: 4px;
-      background: linear-gradient(90deg, #27272A 25%, #3F3F46 50%, #27272A 75%);
-      background-size: 400px 100%;
-      animation: shimmer 1.4s infinite linear;
-      margin-bottom: 0.75rem;
-    }
-    .skeleton-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-    .skeleton-input {
-      height: 46px; border-radius: 8px;
-      background: linear-gradient(90deg, #1C1C20 25%, #27272A 50%, #1C1C20 75%);
-      background-size: 400px 100%;
-      animation: shimmer 1.4s infinite linear;
-    }
-    .skeleton-textarea {
-      height: 104px; border-radius: 8px;
-      background: linear-gradient(90deg, #1C1C20 25%, #27272A 50%, #1C1C20 75%);
-      background-size: 400px 100%;
-      animation: shimmer 1.4s infinite linear;
-    }
-    .skeleton-btn {
-      width: 100px; height: 38px; border-radius: 8px;
-      background: linear-gradient(90deg, #1C1C20 25%, #27272A 50%, #1C1C20 75%);
-      background-size: 400px 100%;
-      animation: shimmer 1.4s infinite linear;
-    }
-
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-  `]
+  styles: [
+    `
+      .form-section {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 1.5rem;
+      }
+      .section-heading {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 1rem;
+      }
+      .draft-badge {
+        font-size: 0.75rem;
+        color: var(--status-recebida);
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        padding: 0.3rem 0.75rem;
+        border-radius: 999px;
+        font-weight: 600;
+        margin-top: 0.25rem;
+      }
+      .erro-formulario {
+        margin-top: 1rem;
+        color: var(--primary);
+        font-size: 0.9rem;
+      }
+    `,
+  ],
 })
 export class OsNovaPageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly osService = inject(OrdemServicoService);
+  private readonly clienteService = inject(ClienteService);
+  private readonly veiculoService = inject(VeiculoService);
+  private readonly notification = inject(NotificationService);
+  private readonly router = inject(Router);
+  private readonly storage = inject(STORAGE_TOKEN);
+  private readonly osJornadaStore = inject(OsJornadaStore);
+  private readonly cdr = inject(ChangeDetectorRef);
+
   clienteId = '';
   veiculoId = '';
-  observacoesIniciais = '';
-
-  buscaDocumento = '';
-  buscaPlaca = '';
+  observacao = '';
+  erroFormulario: string | null = null;
 
   clientes: Cliente[] = [];
   todosVeiculos: Veiculo[] = [];
@@ -223,14 +169,6 @@ export class OsNovaPageComponent implements OnInit {
   loading = false;
   loadingDados = true;
   rascunhoSalvo = false;
-
-  private readonly osService = inject(OrdemServicoService);
-  private readonly clienteService = inject(ClienteService);
-  private readonly veiculoService = inject(VeiculoService);
-  private readonly notification = inject(NotificationService);
-  private readonly router = inject(Router);
-  private readonly storage = inject(STORAGE_TOKEN);
-  private readonly cdr = inject(ChangeDetectorRef);
 
   ngOnInit() {
     this.carregarDados();
@@ -245,43 +183,61 @@ export class OsNovaPageComponent implements OnInit {
     const checarConcluido = () => {
       if (clientesCarregados && veiculosCarregados) {
         this.loadingDados = false;
+        this.cdr.markForCheck();
       }
     };
 
-    this.clienteService.getAll(1, 100).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(res => {
-      this.clientes = res.items || [];
-      this.clienteOptions = this.clientes.map(c => ({
-        value: c.id!,
-        label: `${c.nome} (${c.documento})`
-      }));
-      clientesCarregados = true;
-      checarConcluido();
-    });
+    this.clienteService
+      .getAll(1, 100)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: res => {
+          this.clientes = res.items || [];
+          this.clienteOptions = this.clientes.map(c => ({
+            value: c.id!,
+            label: c.nome,
+          }));
+          clientesCarregados = true;
+          checarConcluido();
+        },
+        error: () => {
+          clientesCarregados = true;
+          checarConcluido();
+        },
+      });
 
-    this.veiculoService.getAll(1, 100).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(res => {
-      const data = res.items || [];
-      this.todosVeiculos = data;
-      this.veiculosFiltrados = data;
-      this.atualizarVeiculoOptions();
-      veiculosCarregados = true;
-      checarConcluido();
-      this.cdr.markForCheck();
-    });
+    this.veiculoService
+      .getAll(1, 100)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: res => {
+          const data = res.items || [];
+          this.todosVeiculos = data;
+          this.veiculosFiltrados = data;
+          this.atualizarVeiculoOptions();
+          veiculosCarregados = true;
+          checarConcluido();
+        },
+        error: () => {
+          veiculosCarregados = true;
+          checarConcluido();
+        },
+      });
   }
 
   atualizarVeiculoOptions() {
     this.veiculoOptions = this.veiculosFiltrados.map(v => ({
       value: v.id!,
-      label: `${v.modelo} - ${v.placa} (${v.marca})`
+      label: `${v.modelo} (${v.marca})`,
     }));
   }
 
   salvarRascunho() {
-    if (this.clienteId || this.veiculoId || this.observacoesIniciais) {
+    if (this.clienteId || this.veiculoId || this.observacao) {
       const draft = {
         clienteId: this.clienteId,
         veiculoId: this.veiculoId,
-        observacoesIniciais: this.observacoesIniciais
+        observacao: this.observacao,
       };
       this.storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       this.rascunhoSalvo = true;
@@ -295,10 +251,9 @@ export class OsNovaPageComponent implements OnInit {
         const draft = JSON.parse(json);
         this.clienteId = draft.clienteId || '';
         this.veiculoId = draft.veiculoId || '';
-        this.observacoesIniciais = draft.observacoesIniciais || '';
+        this.observacao = draft.observacao || '';
         this.rascunhoSalvo = true;
-      } catch (err) {
-        console.warn('Rascunho de OS invalido. Removendo do storage:', err);
+      } catch {
         this.storage.removeItem(DRAFT_STORAGE_KEY);
       }
     }
@@ -311,12 +266,14 @@ export class OsNovaPageComponent implements OnInit {
 
   onClienteSelect(id: string) {
     this.clienteId = id;
+    this.erroFormulario = null;
     this.onClienteChange();
     this.salvarRascunho();
   }
 
   onVeiculoSelect(id: string) {
     this.veiculoId = id;
+    this.erroFormulario = null;
     this.salvarRascunho();
   }
 
@@ -334,56 +291,50 @@ export class OsNovaPageComponent implements OnInit {
     this.atualizarVeiculoOptions();
   }
 
-  buscarCliente() {
-    const doc = this.buscaDocumento.replace(/\D/g, '');
-    if (doc.length >= 8) {
-      const match = this.clientes.find(c => c.documento.replace(/\D/g, '').includes(doc));
-      if (match?.id) {
-        this.clienteId = match.id;
-        this.onClienteChange();
-        this.salvarRascunho();
-      }
-    }
-  }
-
-  buscarVeiculoPorPlaca() {
-    const p = this.buscaPlaca.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (p.length >= 4) {
-      const match = this.todosVeiculos.find(v => v.placa.replace(/[^A-Z0-9]/gi, '').includes(p));
-      if (match?.id) {
-        this.veiculoId = match.id;
-        if (match.clienteId) {
-          this.clienteId = match.clienteId;
-        }
-        this.salvarRascunho();
-      }
-    }
-  }
-
   salvarOS() {
     if (!this.clienteId || !this.veiculoId) {
+      this.erroFormulario = 'Selecione o cliente e o veículo para abrir a OS.';
       this.notification.warning('Atenção', 'Selecione o Cliente e o Veículo para abrir a OS.');
       return;
     }
 
     this.loading = true;
-    this.osService.criar({
-      clienteId: this.clienteId,
-      veiculoId: this.veiculoId,
-      observacoesIniciais: this.observacoesIniciais
-    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (osCriada) => {
-        this.loading = false;
-        this.limparRascunho();
-        this.notification.success('OS Aberta!', `Ordem de Serviço #${osCriada.id.slice(0, 8)} registrada.`);
-        this.cdr.markForCheck();
-        this.router.navigate(['/ordens-servico', osCriada.id]);
-      },
-      error: () => {
-        this.loading = false;
-        this.cdr.markForCheck();
-      }
-    });
+    this.erroFormulario = null;
+    const observacao = this.observacao.trim();
+    this.osService
+      .criar({
+        clienteId: this.clienteId,
+        veiculoId: this.veiculoId,
+        ...(observacao ? { observacao } : {}),
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: osCriada => {
+          this.loading = false;
+          this.limparRascunho();
+          this.osJornadaStore.salvar({
+            osId: osCriada.id,
+            clienteId: this.clienteId,
+            veiculoId: this.veiculoId,
+          });
+          this.notification.success(
+            'OS Aberta!',
+            `Ordem de Serviço #${osCriada.id.slice(0, 8)} registrada.`
+          );
+          this.cdr.markForCheck();
+          this.router.navigate(['/ordens-servico', osCriada.id]);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.loading = false;
+          const generica =
+            MENSAGENS_POR_STATUS[err.status]?.mensagem ?? 'Não foi possível abrir a OS.';
+          this.erroFormulario = mensagemDoCodigo(
+            err.error?.codigo,
+            err.error?.mensagem ?? generica
+          );
+          this.cdr.markForCheck();
+        },
+      });
   }
 
   cancelar() {

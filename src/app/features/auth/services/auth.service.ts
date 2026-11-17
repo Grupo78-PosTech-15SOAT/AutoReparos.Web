@@ -5,6 +5,7 @@ import { Observable, tap } from 'rxjs';
 import { LoginRequest, LoginResponse, UserTokenInfo } from '../models/auth.model';
 import { API_ENDPOINTS } from '../../../core/config/api-endpoints';
 import { STORAGE_TOKEN } from '../../../core/tokens/storage.token';
+import { OsJornadaStore } from '../../../core/store/os-jornada.store';
 
 @Injectable({
   providedIn: 'root'
@@ -13,6 +14,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly storage = inject(STORAGE_TOKEN);
+  private readonly osJornadaStore = inject(OsJornadaStore);
 
   currentUser = signal<UserTokenInfo | null>(this.loadStoredUser());
 
@@ -42,6 +44,7 @@ export class AuthService {
     this.storage.removeItem('autoreparos_token');
     this.storage.removeItem('autoreparos_user');
     this.currentUser.set(null);
+    this.osJornadaStore.limpar();
     this.router.navigate(['/login']);
   }
 
