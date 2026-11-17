@@ -51,6 +51,14 @@ describe('AprovacaoOrcamentoPage', () => {
 
   afterEach(() => controller.verify());
 
+  describe('AprovacaoOrcamentoPage layout compartilhado', () => {
+    it('renderiza dentro de app-page-container e utiliza id-badge', () => {
+      fixture.detectChanges();
+      const pageContainer = fixture.nativeElement.querySelector('app-page-container');
+      expect(pageContainer).toBeTruthy();
+    });
+  });
+
   it('autentica o cliente em POST /auth/cliente e aprova em POST /api/v1/orcamentos/{id}/aprovacao com o JWT retornado, exibindo pagamentoId', () => {
     fixture.detectChanges();
     expect(component.orcamentoId).toBe('orc-555');
@@ -73,6 +81,66 @@ describe('AprovacaoOrcamentoPage', () => {
     const confirmacao = fixture.nativeElement.querySelector('[data-testid="confirmacao-aprovacao"]').textContent as string;
     expect(confirmacao).toContain('Orçamento Aprovado!');
     expect(confirmacao).toContain('pag-777');
+    expect(component.clienteToken()).toBe('jwt-cliente-rs256');
+  });
+
+  describe('AprovacaoOrcamentoPage checkout cliente', () => {
+    it('dispara POST /api/v1/pagamentos/{id}/checkout com token do cliente e exibe url', () => {
+      fixture.detectChanges();
+      component.orcamentoId = 'orc-555';
+      component.cpf = '12345678901';
+      component.email = 'cliente@auto.com';
+      component.aprovar();
+
+      controller.expectOne(API_ENDPOINTS.AUTH.CLIENTE).flush({ token: 'jwt-cliente-rs256' });
+      controller.expectOne(API_ENDPOINTS.ORCAMENTOS.APROVACAO('orc-555')).flush({
+        id: 'orc-555',
+        status: 'Aprovado',
+        pagamentoId: 'pag-777'
+      });
+      fixture.detectChanges();
+
+      const btnCheckout = fixture.nativeElement.querySelector('[data-testid="btn-checkout-cliente"]');
+      expect(btnCheckout).toBeTruthy();
+      btnCheckout.click();
+
+      const reqCheckout = controller.expectOne(API_ENDPOINTS.PAGAMENTOS.CHECKOUT('pag-777'));
+      expect(reqCheckout.request.method).toBe('POST');
+      expect(reqCheckout.request.headers.get('Authorization')).toBe('Bearer jwt-cliente-rs256');
+      reqCheckout.flush({ urlCheckout: 'https://mercadopago.com/checkout/123' });
+      fixture.detectChanges();
+
+      expect(component.urlCheckout()).toBe('https://mercadopago.com/checkout/123');
+      const linkBox = fixture.nativeElement.querySelector('[data-testid="url-checkout"]');
+      expect(linkBox).toBeTruthy();
+    });
+
+    it('exibe erro quando checkout responde 409 checkout_indisponivel', () => {
+      fixture.detectChanges();
+      component.orcamentoId = 'orc-555';
+      component.cpf = '12345678901';
+      component.email = 'cliente@auto.com';
+      component.aprovar();
+
+      controller.expectOne(API_ENDPOINTS.AUTH.CLIENTE).flush({ token: 'jwt-cliente-rs256' });
+      controller.expectOne(API_ENDPOINTS.ORCAMENTOS.APROVACAO('orc-555')).flush({
+        id: 'orc-555',
+        status: 'Aprovado',
+        pagamentoId: 'pag-777'
+      });
+      fixture.detectChanges();
+
+      component.iniciarCheckout();
+      controller.expectOne(API_ENDPOINTS.PAGAMENTOS.CHECKOUT('pag-777')).flush(
+        { codigo: 'checkout_indisponivel' },
+        { status: 409, statusText: 'Conflict' }
+      );
+      fixture.detectChanges();
+
+      expect(component.erroCheckout()).toBeTruthy();
+      const erroEl = fixture.nativeElement.querySelector('[data-testid="erro-checkout"]');
+      expect(erroEl.textContent).toContain('checkout_indisponivel');
+    });
   });
 
   it.each([

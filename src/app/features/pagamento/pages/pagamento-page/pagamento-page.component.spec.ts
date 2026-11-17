@@ -7,6 +7,7 @@ import { PagamentoPageComponent } from './pagamento-page.component';
 import { AuthService } from '../../../auth/services/auth.service';
 import { API_ENDPOINTS } from '../../../../core/config/api-endpoints';
 import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 
 describe('PagamentoPage', () => {
   let fixture: ComponentFixture<PagamentoPageComponent>;
@@ -127,5 +128,17 @@ describe('PagamentoPage', () => {
     component.solicitarReembolso();
     controller.expectOne(API_ENDPOINTS.PAGAMENTOS.REEMBOLSOS('pag-100')).flush(null, { status: 500, statusText: 'Erro' });
     expect(component.enviandoReembolso()).toBe(false);
+  });
+
+  it('oferece opções de atalho via app-custom-select e permite selecionar pagamento', () => {
+    const store = TestBed.inject(OsJornadaStore);
+    store.salvar({ osId: 'os-555', pagamentoId: 'pag-999' });
+    fixture.detectChanges();
+
+    expect(component.osOptions().length).toBe(1);
+    expect(component.osOptions()[0].value).toBe('pag-999');
+
+    component.selecionarOs('pag-999');
+    expect(component.pagamentoId).toBe('pag-999');
   });
 });

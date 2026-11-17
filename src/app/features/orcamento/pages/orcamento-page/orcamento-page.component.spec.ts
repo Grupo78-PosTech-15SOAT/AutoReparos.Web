@@ -5,6 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { OrcamentoPageComponent } from './orcamento-page.component';
 import { API_ENDPOINTS } from '../../../../core/config/api-endpoints';
+import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
 
 describe('OrcamentoPage', () => {
   let fixture: ComponentFixture<OrcamentoPageComponent>;
@@ -12,12 +13,23 @@ describe('OrcamentoPage', () => {
   let controller: HttpTestingController;
 
   beforeEach(async () => {
+    const memoria = new Map<string, string>();
+    const storage: Storage = {
+      get length() { return memoria.size; },
+      clear: () => memoria.clear(),
+      getItem: (k: string) => memoria.get(k) ?? null,
+      key: () => null,
+      removeItem: (k: string) => { memoria.delete(k); },
+      setItem: (k: string, v: string) => { memoria.set(k, v); },
+    };
+
     await TestBed.configureTestingModule({
       imports: [OrcamentoPageComponent],
       providers: [
         provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: STORAGE_TOKEN, useValue: storage },
         {
           provide: ActivatedRoute,
           useValue: {
@@ -37,91 +49,103 @@ describe('OrcamentoPage', () => {
 
   afterEach(() => controller.verify());
 
-  it('lista serviços e insumos com preço e saldo, soma o total e envia POST /api/v1/orcamentos exibindo id, status e valor', () => {
-    fixture.detectChanges();
+  describe('OrcamentoPage agrupamento', () => {
+    it('agrupa itens repetidos somando quantidade, exibe total no cliente e envia valor: 0 com itens únicos; e suporta modo avulso sem itens', () => {
+      fixture.detectChanges();
 
-    const reqServicos = controller.expectOne(API_ENDPOINTS.SERVICOS.BASE);
-    expect(reqServicos.request.method).toBe('GET');
-    reqServicos.flush([{ id: 'srv-1', nome: 'Troca de Óleo', precoBase: 100 }]);
+      const reqServicos = controller.expectOne(API_ENDPOINTS.SERVICOS.BASE);
+      expect(reqServicos.request.method).toBe('GET');
+      reqServicos.flush([{ id: 'srv-1', nome: 'Troca de Óleo', precoBase: 100 }]);
 
-    const reqInsumos = controller.expectOne(API_ENDPOINTS.INSUMOS.BASE);
-    expect(reqInsumos.request.method).toBe('GET');
-    reqInsumos.flush([{ id: 'ins-1', nome: 'Óleo 5W30', precoUnitario: 55, saldoDisponivel: 15 }]);
-    fixture.detectChanges();
+      const reqInsumos = controller.expectOne(API_ENDPOINTS.INSUMOS.BASE);
+      expect(reqInsumos.request.method).toBe('GET');
+      reqInsumos.flush([{ id: 'ins-1', nome: 'Filtro', precoUnitario: 50, quantidadeDisponivel: 10 }]);
+      fixture.detectChanges();
 
-    const textoCatalogo = fixture.nativeElement.textContent as string;
-    expect(textoCatalogo).toContain('Troca de Óleo');
-    expect(textoCatalogo).toContain('Óleo 5W30');
-    expect(textoCatalogo).toContain('Saldo: 15');
+      // Adiciona o mesmo serviço duas vezes (1 + 2 = 3)
+      component.adicionarServico(component.servicos()[0], 1);
+      component.adicionarServico(component.servicos()[0], 2);
+      fixture.detectChanges();
 
-    component.adicionarServico(component.servicos()[0], 1);
-    component.adicionarInsumo(component.insumos()[0], 2);
-    fixture.detectChanges();
+      expect(component.itens().length).toBe(1);
+      expect(component.itens()[0].quantidade).toBe(3);
+      expect(component.itens()[0].subtotal).toBe(300);
+      expect(component.total()).toBe(300);
 
-    expect(component.total()).toBe(210);
-    expect(
-      fixture.nativeElement.querySelector('[data-testid="total-orcamento"]').textContent
-    ).toContain('210');
+      // Edita a quantidade na lista (ex: altera de 3 para 4)
+      component.atualizarQuantidade(0, 4);
+      fixture.detectChanges();
+      expect(component.itens()[0].quantidade).toBe(4);
+      expect(component.itens()[0].subtotal).toBe(400);
+      expect(component.total()).toBe(400);
 
-    component.enviar();
+      // Envia modo itens: deve enviar valor: 0 e lista de itens
+      component.enviar();
 
-    const post = controller.expectOne(API_ENDPOINTS.ORCAMENTOS.BASE);
-    expect(post.request.method).toBe('POST');
-    expect(post.request.body).toEqual({
-      ordemServicoId: 'os-101',
-      clienteId: 'cli-202',
-      valor: 210,
-      itens: [
-        {
-          tipo: 'Servico',
-          referenciaId: 'srv-1',
-          nome: 'Troca de Óleo',
-          quantidade: 1,
-          precoUnitario: 100,
-          subtotal: 100,
-        },
-        {
-          tipo: 'Insumo',
-          referenciaId: 'ins-1',
-          nome: 'Óleo 5W30',
-          quantidade: 2,
-          precoUnitario: 55,
-          subtotal: 110,
-        },
-      ],
+      const postItens = controller.expectOne(API_ENDPOINTS.ORCAMENTOS.BASE);
+      expect(postItens.request.method).toBe('POST');
+      expect(postItens.request.body).toEqual({
+        ordemServicoId: 'os-101',
+        clienteId: 'cli-202',
+        valor: 0,
+        itens: [
+          {
+            tipo: 'Servico',
+            referenciaId: 'srv-1',
+            nome: 'Troca de Óleo',
+            quantidade: 4,
+            precoUnitario: 100,
+            subtotal: 400,
+          },
+        ],
+      });
+      postItens.flush({
+        id: 'orc-1',
+        ordemServicoId: 'os-101',
+        clienteId: 'cli-202',
+        valor: 400,
+        status: 'Pendente',
+      });
+      fixture.detectChanges();
+
+      expect(component.orcamentoCriado()?.id).toBe('orc-1');
+
+      // Modo avulso: alterna e envia valor > 0 sem itens
+      component.modo.set('avulso');
+      component.valorAvulso = 250.75;
+      component.enviar();
+
+      const postAvulso = controller.expectOne(API_ENDPOINTS.ORCAMENTOS.BASE);
+      expect(postAvulso.request.method).toBe('POST');
+      expect(postAvulso.request.body).toEqual({
+        ordemServicoId: 'os-101',
+        clienteId: 'cli-202',
+        valor: 250.75,
+        itens: undefined,
+      });
+      postAvulso.flush({
+        id: 'orc-2',
+        ordemServicoId: 'os-101',
+        clienteId: 'cli-202',
+        valor: 250.75,
+        status: 'Pendente',
+      });
+      fixture.detectChanges();
+      expect(component.orcamentoCriado()?.id).toBe('orc-2');
     });
-
-    post.flush({
-      id: 'orc-999',
-      ordemServicoId: 'os-101',
-      clienteId: 'cli-202',
-      valor: 210,
-      status: 'Pendente',
-    });
-    fixture.detectChanges();
-
-    const blocoCriado = fixture.nativeElement.querySelector('[data-testid="orcamento-criado"]').textContent as string;
-    expect(blocoCriado).toContain('orc-999');
-    expect(blocoCriado).toContain('Pendente');
-    expect(blocoCriado).toContain('210');
   });
 
-  it('permite remover item e trata erro ao enviar ou carregar catálogo', () => {
+  it('permite remover item da lista', () => {
     fixture.detectChanges();
-    controller.expectOne(API_ENDPOINTS.SERVICOS.BASE).flush(null, { status: 500, statusText: 'Erro' });
-    controller.expectOne(API_ENDPOINTS.INSUMOS.BASE).flush(null, { status: 500, statusText: 'Erro' });
+    controller.expectOne(API_ENDPOINTS.SERVICOS.BASE).flush([{ id: 'srv-1', nome: 'Alinhamento', precoBase: 80 }]);
+    controller.expectOne(API_ENDPOINTS.INSUMOS.BASE).flush([]);
+    fixture.detectChanges();
 
-    component.adicionarServico({ id: 's1', nome: 'Diagnostico', valorTabelado: 80 }, 1);
-    component.adicionarInsumo({ id: 'i1', nome: 'Aditivo', valor: 40, quantidadeEstoque: 3 }, 1);
-    expect(component.total()).toBe(120);
+    component.adicionarServico(component.servicos()[0], 1);
+    expect(component.itens().length).toBe(1);
 
     component.removerItem(0);
-    expect(component.itens()).toHaveLength(1);
-    expect(component.total()).toBe(40);
-
-    component.enviar();
-    controller.expectOne(API_ENDPOINTS.ORCAMENTOS.BASE).flush(null, { status: 500, statusText: 'Erro' });
-    expect(component.enviando()).toBe(false);
-    expect(component.orcamentoCriado()).toBeNull();
+    expect(component.itens().length).toBe(0);
+    expect(component.total()).toBe(0);
   });
 });

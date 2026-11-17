@@ -7,6 +7,7 @@ import { OsDetalhePageComponent } from './os-detalhe-page.component';
 import { errorInterceptor } from '../../../../core/http/error.interceptor';
 import { API_ENDPOINTS } from '../../../../core/config/api-endpoints';
 import { AuthService } from '../../../auth/services/auth.service';
+import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
 
 describe('OsDetalhePage', () => {
   let fixture: ComponentFixture<OsDetalhePageComponent>;
@@ -15,12 +16,23 @@ describe('OsDetalhePage', () => {
   let auth: AuthService;
 
   beforeEach(async () => {
+    const memoria = new Map<string, string>();
+    const storage: Storage = {
+      get length() { return memoria.size; },
+      clear: () => memoria.clear(),
+      getItem: (k: string) => memoria.get(k) ?? null,
+      key: () => null,
+      removeItem: (k: string) => { memoria.delete(k); },
+      setItem: (k: string, v: string) => { memoria.set(k, v); },
+    };
+
     await TestBed.configureTestingModule({
       imports: [OsDetalhePageComponent],
       providers: [
         provideRouter([]),
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
+        { provide: STORAGE_TOKEN, useValue: storage },
       ],
     }).compileComponents();
 
@@ -34,7 +46,10 @@ describe('OsDetalhePage', () => {
     });
   });
 
-  afterEach(() => controller.verify());
+  afterEach(() => {
+    controller.verify();
+    TestBed.resetTestingModule();
+  });
 
   it('mostra status, observação, histórico, estado da execução e ações de orçamento, pagamento e cancelamento', () => {
     fixture = TestBed.createComponent(OsDetalhePageComponent);
@@ -59,7 +74,7 @@ describe('OsDetalhePage', () => {
     const reqExec = controller.expectOne(
       req =>
         req.url === API_ENDPOINTS.EXECUCAO.FILA &&
-        req.params.get('ordemServicoId') === 'os-11112222'
+        req.params.get('status') === 'Fila,EmExecucao,Concluida,Falhou,Cancelada'
     );
     expect(reqExec.request.method).toBe('GET');
     reqExec.flush({
@@ -72,6 +87,16 @@ describe('OsDetalhePage', () => {
         },
       ],
     });
+
+    const reqSaga = controller.expectOne(API_ENDPOINTS.SAGAS.BY_ID('os-11112222'));
+    reqSaga.flush({ ordemServicoId: 'os-11112222', orcamentoId: 'orc-5555' });
+
+    const reqCli = controller.expectOne(API_ENDPOINTS.CLIENTES.BY_ID('cli-99998888'));
+    reqCli.flush({ id: 'cli-99998888', nome: 'Carlos Cliente', documento: '123.456.789-00' });
+
+    const reqVei = controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-77776666'));
+    reqVei.flush({ id: 'vei-77776666', modelo: 'Civic', placa: 'ABC1D23' });
+
     fixture.detectChanges();
 
     const texto = fixture.nativeElement.textContent as string;
@@ -79,9 +104,16 @@ describe('OsDetalhePage', () => {
     expect(texto).toContain('Vazamento de fluido');
     expect(texto).toContain('Recebida');
     expect(texto).toContain('EmExecucao');
+    expect(texto).toContain('Carlos Cliente');
+    expect(texto).toContain('Civic');
     expect(texto).toContain('Montar orçamento');
+    expect(texto).toContain('Link aprovação cliente');
     expect(texto).toContain('Abrir pagamento');
     expect(fixture.nativeElement.querySelector('app-os-cancelamento')).not.toBeNull();
+    const linkAprovacao = fixture.nativeElement.querySelector('[data-testid="link-aprovar-orcamento"]');
+    expect(linkAprovacao.getAttribute('href')).toContain('orcamentoId=orc-5555');
+    expect(linkAprovacao.getAttribute('href')).not.toContain('cpf=');
+    expect(linkAprovacao.getAttribute('href')).not.toContain('email=');
   });
 
   it('salva a observação em PATCH /api/v1/ordens-servico/{id}', () => {
@@ -101,6 +133,9 @@ describe('OsDetalhePage', () => {
     controller
       .expectOne(req => req.url === API_ENDPOINTS.EXECUCAO.FILA)
       .flush({ itens: [] });
+    controller.expectOne(API_ENDPOINTS.SAGAS.BY_ID('os-11112222')).flush({ ordemServicoId: 'os-11112222' });
+    controller.expectOne(API_ENDPOINTS.CLIENTES.BY_ID('cli-1')).flush({ id: 'cli-1', nome: 'Cliente 1', documento: '111' });
+    controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-1')).flush({ id: 'vei-1', modelo: 'Gol', placa: 'ABC1234' });
     fixture.detectChanges();
 
     component.observacaoEditada = 'Correia dentada substituída';
@@ -138,5 +173,31 @@ describe('OsDetalhePage', () => {
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
       'Não foi possível carregar a OS.'
     );
+  });
+
+  it('exibe fallback com IDs quando busca de cliente ou veículo falha', () => {
+    fixture = TestBed.createComponent(OsDetalhePageComponent);
+    fixture.componentRef.setInput('id', 'os-fail-info');
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    controller.expectOne(API_ENDPOINTS.ORDENS_SERVICO.BY_ID('os-fail-info')).flush({
+      id: 'os-fail-info',
+      clienteId: 'cli-fail-1234',
+      veiculoId: 'vei-fail-5678',
+      status: 'Recebida',
+      historico: [],
+    });
+    controller
+      .expectOne(req => req.url === API_ENDPOINTS.EXECUCAO.FILA)
+      .flush({ itens: [] });
+    controller.expectOne(API_ENDPOINTS.SAGAS.BY_ID('os-fail-info')).flush(null, { status: 404, statusText: 'Not Found' });
+    controller.expectOne(API_ENDPOINTS.CLIENTES.BY_ID('cli-fail-1234')).flush(null, { status: 500, statusText: 'Error' });
+    controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-fail-5678')).flush(null, { status: 500, statusText: 'Error' });
+    fixture.detectChanges();
+
+    const texto = fixture.nativeElement.textContent as string;
+    expect(texto).toContain('cli-fail');
+    expect(texto).toContain('vei-fail');
   });
 });
