@@ -5,13 +5,20 @@ on:
     branches: [main]
   push:
     branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      ignorar_quality:
+        description: Implantar mesmo com o quality vermelho (uso manual; build e test continuam obrigatórios)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-cd-${{ github.ref }}
-  cancel-in-progress: true
+  # Na main não cancela: um deploy interrompido deixaria a release do Helm presa em pending-upgrade.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -47,7 +54,10 @@ jobs:
 
   quality:
     needs: test
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.base_ref == 'main')
+    # Push ou disparo manual na main e PR para a main. A primeira análise de uma branch no SonarCloud não tem linha
+    # de base de código novo: o quality gate fica NONE e o scanner sai com código 3 (run 43251757645, 12/11); a
+    # análise seguinte da mesma branch já compara com a anterior.
+    if: (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
