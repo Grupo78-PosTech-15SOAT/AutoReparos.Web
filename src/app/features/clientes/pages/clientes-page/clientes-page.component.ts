@@ -33,7 +33,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
             Clientes
           </h1>
         </div>
-        <button (click)="abrirModalNovo()" class="btn btn-primary">
+        <button type="button" (click)="abrirModalNovo()" class="btn btn-primary">
           + Cliente
         </button>
       </div>
@@ -53,7 +53,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
               <th>Documento</th>
               <th>E-mail</th>
               <th>Telefone</th>
-              <th>Ações</th>
+              <th class="col-acoes">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -65,16 +65,20 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
                 </td>
                 <td>{{ c.email }}</td>
                 <td>{{ c.telefone }}</td>
-                <td>
-                  <div style="display: flex; gap: 0.5rem;">
-                    <button (click)="editar(c)" class="btn btn-secondary btn-sm" title="Editar Cliente">✏️ Editar</button>
-                    <button (click)="excluir(c.id!)" class="btn btn-danger btn-sm" title="Excluir Cliente">🗑️</button>
+                <td class="col-acoes">
+                  <div class="acoes-linha">
+                    <button type="button" (click)="editar(c)" class="btn btn-ghost btn-icon btn-sm" [attr.aria-label]="'Editar ' + c.nome" [title]="'Editar ' + c.nome">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    </button>
+                    <button type="button" (click)="excluir(c.id!)" class="btn btn-ghost btn-danger btn-icon btn-sm" [attr.aria-label]="'Excluir ' + c.nome" [title]="'Excluir ' + c.nome">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </button>
                   </div>
                 </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="5" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                <td colspan="5" class="empty-state">
                   Nenhum cliente cadastrado.
                 </td>
               </tr>
@@ -102,28 +106,29 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
       >
         <form (ngSubmit)="salvar()">
           <div class="form-group">
-            <label class="form-label">Nome</label>
-            <input type="text" [(ngModel)]="formCliente.nome" name="nome" required placeholder="Nome completo ou razão social" class="form-control" />
+            <label class="form-label" for="cli-nome">Nome</label>
+            <input type="text" [(ngModel)]="formCliente.nome" id="cli-nome" name="nome" required placeholder="Nome completo ou razão social" class="form-control" />
           </div>
 
           <div class="grid-2">
             <div class="form-group">
-              <label class="form-label">Tipo de Pessoa</label>
+              <label class="form-label" for="cli-tipo">Tipo de Pessoa</label>
               <app-custom-select
                 [options]="tipoDocumentoOptions"
                 [value]="formCliente.tipoDocumento || 'CPF'"
                 [disabled]="!!editandoId"
+                idGatilho="cli-tipo"
                 placeholder="Selecione o Tipo"
                 (valueChange)="formCliente.tipoDocumento = $any($event)"
               ></app-custom-select>
             </div>
 
             <div class="form-group">
-              <label class="form-label">CPF / CNPJ</label>
+              <label class="form-label" for="cli-documento">CPF / CNPJ</label>
               <input
                 type="text"
                 [(ngModel)]="formCliente.documento"
-                name="documento"
+                id="cli-documento" name="documento"
                 appMask="cpfCnpj"
                 required
                 [disabled]="!!editandoId"
@@ -135,13 +140,13 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
 
           <div class="grid-2">
             <div class="form-group">
-              <label class="form-label">E-mail</label>
-              <input type="email" [(ngModel)]="formCliente.email" name="email" required placeholder="cliente@email.com" class="form-control" />
+              <label class="form-label" for="cli-email">E-mail</label>
+              <input type="email" [(ngModel)]="formCliente.email" id="cli-email" name="email" required placeholder="cliente@email.com" class="form-control" />
             </div>
 
             <div class="form-group">
-              <label class="form-label">Telefone</label>
-              <input type="text" [(ngModel)]="formCliente.telefone" name="telefone" appMask="telefone" required placeholder="(11) 99999-9999" class="form-control" />
+              <label class="form-label" for="cli-telefone">Telefone</label>
+              <input type="text" [(ngModel)]="formCliente.telefone" id="cli-telefone" name="telefone" appMask="telefone" required placeholder="(11) 99999-9999" class="form-control" />
             </div>
           </div>
 
@@ -154,28 +159,8 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
     </app-page-container>
   `,
   styles: [`
-    .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 0.5rem; }
-    .form-group { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
-    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
-    .form-control {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      font-size: 0.95rem;
-      outline: none;
-    }
-    .form-control:focus {
-      border-color: var(--primary);
-    }
-    .form-control:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .page-title { display: flex; align-items: center; gap: 0.5rem; }
   `]
 })
 export class ClientesPageComponent implements OnInit {

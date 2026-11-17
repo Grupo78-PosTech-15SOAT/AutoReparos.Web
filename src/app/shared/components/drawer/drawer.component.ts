@@ -132,6 +132,9 @@ import {
       flex-shrink: 0;
       border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
     }
+    .drawer-footer-zone:empty {
+      display: none;
+    }
 
     /* ── Responsividade ── */
     @media (max-width: 768px) {

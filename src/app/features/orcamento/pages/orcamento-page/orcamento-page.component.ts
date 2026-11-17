@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrcamentoService } from '../../services/orcamento.service';
 import { ServicoService } from '../../../servicos/services/servico.service';
 import { InsumoService } from '../../../insumos/services/insumo.service';
@@ -11,95 +10,178 @@ import { Insumo } from '../../../insumos/models/insumo.model';
 import { ItemOrcamento, OrcamentoCriadoResponse, agruparItensOrcamento } from '../../models/orcamento.model';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { CustomSelectComponent, SelectOption } from '../../../../shared/components/custom-select/custom-select.component';
+import { IdBadgeComponent, idCurto } from '../../../../shared/components/id-badge/id-badge.component';
+import { PlacaBadgeComponent } from '../../../../shared/components/placa-badge/placa-badge.component';
+import { DocumentoBadgeComponent } from '../../../../shared/components/documento-badge/documento-badge.component';
+import { AlertBannerComponent } from '../../../../shared/components/alert-banner/alert-banner.component';
+import { MoedaPipe } from '../../../../shared/pipes/moeda.pipe';
+import { CpfCnpjPipe } from '../../../../shared/pipes/cpf-cnpj.pipe';
 import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
+import {
+  OsConhecidasService,
+  OsEnriquecida,
+  formatarPlaca,
+  opcaoDeOs,
+  ordenarParaOrcamento,
+} from '../../../ordens-servico/services/os-conhecidas.service';
+
+/** UUID completo (formato GUID), para aceitar o código colado de uma OS fora da lista. */
+const REGEX_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const MENSAGEM_OS_NAO_ENCONTRADA = 'OS não encontrada para o código informado.';
 
 @Component({
   selector: 'app-orcamento-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormsModule, PageContainerComponent, CustomSelectComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    PageContainerComponent,
+    CustomSelectComponent,
+    IdBadgeComponent,
+    PlacaBadgeComponent,
+    DocumentoBadgeComponent,
+    AlertBannerComponent,
+    MoedaPipe,
+    CpfCnpjPipe,
+  ],
   template: `
     <app-page-container>
       <div class="page-header">
         <div>
           <h1 class="page-title">Montar Orçamento</h1>
-          <p class="page-subtitle">Selecione serviços e insumos do catálogo da Execução ou informe valor avulso.</p>
+          <p class="page-subtitle">Escolha a OS, selecione serviços e insumos do catálogo da Execução ou informe valor avulso.</p>
         </div>
       </div>
 
-      <section class="card-panel" style="margin-bottom: 1.25rem;">
-        <div class="grid-2">
-          <div class="form-group">
-            <label class="form-label" for="orc-os-id">Ordem de Serviço (ID)</label>
-            @if (osOptions().length > 0) {
-              <div style="margin-bottom: 0.5rem;">
-                <app-custom-select
-                  [options]="osOptions()"
-                  [value]="ordemServicoId"
-                  (valueChange)="selecionarOs($event)"
-                  placeholder="Selecione uma OS recente..."
-                ></app-custom-select>
-              </div>
-            }
-            <input id="orc-os-id" type="text" [(ngModel)]="ordemServicoId" name="ordemServicoId" class="form-control" placeholder="UUID da OS" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="orc-cliente-id">Cliente (ID)</label>
-            <input id="orc-cliente-id" type="text" [(ngModel)]="clienteId" name="clienteId" class="form-control" placeholder="UUID do Cliente" />
-          </div>
+      <section class="card-panel bloco" aria-label="Ordem de Serviço">
+        <div class="form-group">
+          <label class="form-label" for="orc-seletor-os">Ordem de Serviço</label>
+          <app-custom-select
+            data-testid="seletor-os"
+            idGatilho="orc-seletor-os"
+            [options]="osOptions()"
+            [value]="ordemServicoId()"
+            [loading]="carregandoOs() || resolvendoOs()"
+            [buscaSempre]="true"
+            [permitirVazio]="false"
+            placeholder="Selecione a OS"
+            placeholderBusca="Código, placa, modelo ou cliente"
+            textoVazio="Nenhuma OS encontrada. Cole o código completo da OS."
+            (buscaMudou)="buscaOs.set($event)"
+            (valueChange)="selecionarOs($event)"
+          ></app-custom-select>
         </div>
 
-        <div class="mode-selector">
-          <label class="mode-label">
-            <input type="radio" name="modo" value="itens" [checked]="modo() === 'itens'" (change)="modo.set('itens')" />
-            Modo com Itens do Catálogo (Padrão)
-          </label>
-          <label class="mode-label">
-            <input type="radio" name="modo" value="avulso" [checked]="modo() === 'avulso'" (change)="modo.set('avulso')" />
-            Modo Valor Avulso (Sem Itens)
-          </label>
+        @if (erroOs(); as mensagem) {
+          <div data-testid="erro-os" class="bloco-erro">
+            <app-alert-banner tipo="erro" [mensagem]="mensagem"></app-alert-banner>
+          </div>
+        }
+
+        @if (osSelecionada(); as os) {
+          <div class="resumo-os" data-testid="resumo-os">
+            <div class="resumo-item">
+              <span class="resumo-rotulo">Cliente</span>
+              <div class="resumo-valor">
+                @if (os.clienteNome) {
+                  <strong data-testid="resumo-cliente">{{ os.clienteNome }}</strong>
+                  @if (os.clienteDocumento) {
+                    <app-documento-badge [documento]="os.clienteDocumento | cpfCnpj" size="sm"></app-documento-badge>
+                  }
+                } @else if (clienteId()) {
+                  <app-id-badge [text]="clienteId()" size="sm"></app-id-badge>
+                } @else {
+                  <span class="text-danger">Cliente da OS não identificado</span>
+                }
+              </div>
+            </div>
+            <div class="resumo-item">
+              <span class="resumo-rotulo">Veículo</span>
+              <div class="resumo-valor">
+                @if (os.placa) {
+                  <app-placa-badge [placa]="formatarPlaca(os.placa)" size="sm"></app-placa-badge>
+                  <span data-testid="resumo-modelo">{{ os.modelo }}@if (os.marca) { ({{ os.marca }})}</span>
+                } @else if (os.veiculoId) {
+                  <app-id-badge [text]="os.veiculoId" size="sm"></app-id-badge>
+                } @else {
+                  <span class="text-muted">Veículo não identificado</span>
+                }
+              </div>
+            </div>
+            <div class="resumo-item">
+              <span class="resumo-rotulo">OS</span>
+              <div class="resumo-valor">
+                <app-id-badge [text]="os.id" size="sm"></app-id-badge>
+              </div>
+            </div>
+          </div>
+        }
+
+        <div class="modo-selector" role="group" aria-label="Modo do orçamento">
+          <button
+            type="button"
+            class="modo-opcao"
+            data-testid="modo-itens"
+            [class.ativo]="modo() === 'itens'"
+            [attr.aria-pressed]="modo() === 'itens'"
+            (click)="modo.set('itens')"
+          >
+            Itens do catálogo
+          </button>
+          <button
+            type="button"
+            class="modo-opcao"
+            data-testid="modo-avulso"
+            [class.ativo]="modo() === 'avulso'"
+            [attr.aria-pressed]="modo() === 'avulso'"
+            (click)="modo.set('avulso')"
+          >
+            Valor avulso
+          </button>
         </div>
       </section>
 
       @if (modo() === 'itens') {
-        <div class="grid-2" style="margin-bottom: 1.25rem;">
+        <div class="grid-2 bloco">
           <section class="card-panel" aria-label="Catálogo de Serviços">
             <h3 class="secao">Serviços</h3>
-            <ul class="lista">
+            <ul class="lista lista-rolavel">
               @for (s of servicos(); track s.id ?? s.nome) {
                 <li class="linha" data-testid="catalogo-servico">
                   <div>
                     <strong>{{ s.nome }}</strong>
-                    <span class="detalhe"> — R$ {{ (s.precoUnitario ?? s.precoBase ?? s.valorTabelado ?? 0) | number:'1.2-2' }}</span>
+                    <span class="detalhe"> — {{ (s.precoUnitario ?? s.precoBase ?? s.valorTabelado ?? 0) | moeda }}</span>
                   </div>
-                  <button type="button" class="btn btn-secondary btn-sm" (click)="adicionarServico(s)">
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="adicionarServico(s)">
                     + Adicionar
                   </button>
                 </li>
               } @empty {
-                <li class="linha">Nenhum serviço disponível.</li>
+                <li class="linha text-muted">Nenhum serviço disponível.</li>
               }
             </ul>
           </section>
 
           <section class="card-panel" aria-label="Catálogo de Insumos">
             <h3 class="secao">Insumos</h3>
-            <ul class="lista">
+            <ul class="lista lista-rolavel">
               @for (i of insumos(); track i.id ?? i.nome) {
                 <li class="linha" data-testid="catalogo-insumo">
                   <div>
                     <strong>{{ i.nome }}</strong>
                     <span class="detalhe">
-                      — R$ {{ (i.precoUnitario ?? i.valor ?? 0) | number:'1.2-2' }}
+                      — {{ (i.precoUnitario ?? i.valor ?? 0) | moeda }}
                       (Saldo: {{ i.quantidadeDisponivel ?? i.saldoDisponivel ?? i.quantidadeEstoque ?? 0 }})
                     </span>
                   </div>
-                  <button type="button" class="btn btn-secondary btn-sm" (click)="adicionarInsumo(i)">
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="adicionarInsumo(i)">
                     + Adicionar
                   </button>
                 </li>
               } @empty {
-                <li class="linha">Nenhum insumo disponível.</li>
+                <li class="linha text-muted">Nenhum insumo disponível.</li>
               }
             </ul>
           </section>
@@ -110,38 +192,45 @@ import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
           <ul class="lista">
             @for (item of itens(); track $index) {
               <li class="linha" data-testid="item-orcamento">
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                  <span>{{ item.nome }} ({{ item.tipo }})</span>
-                  <div class="qtd-control">
-                    <label class="sr-only">Quantidade</label>
-                    <input
-                      type="number"
-                      min="1"
-                      [ngModel]="item.quantidade"
-                      (ngModelChange)="atualizarQuantidade($index, $event)"
-                      class="input-qtd"
-                    />
-                  </div>
+                <div class="item-info">
+                  <span>{{ item.nome }} <span class="text-muted">({{ item.tipo }})</span></span>
+                  <label class="sr-only" [attr.for]="'qtd-' + $index">Quantidade de {{ item.nome }}</label>
+                  <input
+                    [id]="'qtd-' + $index"
+                    type="number"
+                    min="1"
+                    [ngModel]="item.quantidade"
+                    (ngModelChange)="atualizarQuantidade($index, $event)"
+                    class="form-control input-qtd"
+                  />
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                  <strong>R$ {{ item.subtotal | number:'1.2-2' }}</strong>
-                  <button type="button" class="btn btn-danger btn-sm" (click)="removerItem($index)">Remover</button>
+                <div class="item-info">
+                  <strong data-testid="subtotal-item">{{ item.subtotal | moeda }}</strong>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-danger btn-icon btn-sm"
+                    [attr.aria-label]="'Remover ' + item.nome"
+                    [title]="'Remover ' + item.nome"
+                    (click)="removerItem($index)"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
                 </div>
               </li>
             } @empty {
-              <li class="linha">Adicione serviços ou insumos para compor o orçamento.</li>
+              <li class="linha text-muted">Adicione serviços ou insumos para compor o orçamento.</li>
             }
           </ul>
 
           <div class="rodape-total">
             <div data-testid="total-orcamento">
-              Total calculado: <strong>R$ {{ total() | number:'1.2-2' }}</strong>
+              Total calculado: <strong>{{ total() | moeda }}</strong>
             </div>
             <button
               type="button"
               class="btn btn-primary"
               data-testid="btn-enviar-orcamento"
-              [disabled]="enviando() || !ordemServicoId.trim() || !clienteId.trim() || itens().length === 0"
+              [disabled]="enviando() || !podeEnviar() || itens().length === 0"
               (click)="enviar()"
             >
               {{ enviando() ? 'Enviando...' : 'Enviar Orçamento' }}
@@ -165,12 +254,13 @@ import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
             />
           </div>
 
-          <div class="rodape-total" style="margin-top: 1rem;">
+          <div class="rodape-total">
+            <span class="text-muted">Sem itens: o valor informado é o total do orçamento.</span>
             <button
               type="button"
               class="btn btn-primary"
               data-testid="btn-enviar-orcamento"
-              [disabled]="enviando() || !ordemServicoId.trim() || !clienteId.trim() || valorAvulso <= 0"
+              [disabled]="enviando() || !podeEnviar() || valorAvulso <= 0"
               (click)="enviar()"
             >
               {{ enviando() ? 'Enviando...' : 'Enviar Orçamento Avulso' }}
@@ -181,45 +271,80 @@ import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 
       @if (orcamentoCriado(); as criado) {
         <div class="resultado-criado" role="status" data-testid="orcamento-criado">
-          <p>Orçamento criado: <strong>{{ criado.id }}</strong></p>
+          <p>Orçamento criado: <app-id-badge [text]="criado.id"></app-id-badge></p>
           <p>Status: <strong>{{ criado.status }}</strong></p>
-          <p>Valor: <strong>R$ {{ criado.valor | number:'1.2-2' }}</strong></p>
+          <p>Valor: <strong data-testid="valor-criado">{{ criado.valor | moeda }}</strong></p>
+          <a
+            class="btn btn-secondary"
+            routerLink="/aprovar-orcamento"
+            [queryParams]="{ orcamentoId: criado.id }"
+            data-testid="link-aprovacao"
+          >
+            Abrir aprovação do cliente
+          </a>
         </div>
       }
     </app-page-container>
   `,
   styles: [`
+    .bloco { margin-bottom: 1.25rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
-    .card-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; }
-    .secao { font-family: 'Outfit', sans-serif; font-size: 1.05rem; color: var(--primary); margin-bottom: 0.75rem; }
+    .secao { font-family: var(--font-display); font-size: 1.05rem; color: var(--primary); margin-bottom: 0.75rem; }
     .lista { list-style: none; margin: 0; padding: 0; }
-    .linha { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); }
+    .lista-rolavel { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding-right: 0.25rem; }
+    .linha { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); }
     .detalhe { color: var(--text-muted); font-size: 0.85rem; }
-    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.8rem; }
-    .rodape-total { display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
-    .resultado-criado { margin-top: 1rem; padding: 1rem; border-radius: var(--radius-md); background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: var(--text-main); }
-    .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
-    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
-    .form-control {
+    .item-info { display: flex; align-items: center; gap: 0.75rem; }
+    .input-qtd { width: 4.5rem; min-height: 2.25rem; padding: 0.25rem 0.5rem; text-align: center; }
+    .rodape-total { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+    .bloco-erro { margin-bottom: 1rem; }
+    .resumo-os {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem 1.25rem;
+      padding: 0.85rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: var(--radius-sm);
       background: var(--bg-surface);
       border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      outline: none;
     }
-    .mode-selector { display: flex; gap: 1.5rem; margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); }
-    .mode-label { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-main); cursor: pointer; }
-    .input-qtd {
-      width: 60px;
-      padding: 0.25rem 0.4rem;
+    .resumo-item { display: flex; flex-direction: column; gap: 0.3rem; }
+    .resumo-rotulo { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-subtle); }
+    .resumo-valor { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+    .modo-selector {
+      display: inline-flex;
+      padding: 0.25rem;
+      gap: 0.25rem;
+      border-radius: var(--radius-sm);
       background: var(--bg-surface);
       border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      color: var(--text-main);
-      text-align: center;
     }
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+    .modo-opcao {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.875rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: calc(var(--radius-sm) - 2px);
+      cursor: pointer;
+    }
+    .modo-opcao:hover { color: var(--text-main); }
+    .modo-opcao.ativo { background: var(--primary-subtle); color: var(--text-main); font-weight: 600; }
+    .modo-opcao:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .resultado-criado {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .resultado-criado p { margin: 0; display: flex; align-items: center; gap: 0.5rem; }
   `]
 })
 export class OrcamentoPageComponent implements OnInit {
@@ -229,10 +354,10 @@ export class OrcamentoPageComponent implements OnInit {
   private readonly insumoService = inject(InsumoService);
   private readonly orcamentoService = inject(OrcamentoService);
   private readonly osJornadaStore = inject(OsJornadaStore);
+  private readonly osConhecidas = inject(OsConhecidasService);
 
-  ordemServicoId = '';
-  clienteId = '';
   valorAvulso = 0;
+  readonly formatarPlaca = formatarPlaca;
 
   readonly modo = signal<'itens' | 'avulso'>('itens');
   readonly servicos = signal<Servico[]>([]);
@@ -241,12 +366,35 @@ export class OrcamentoPageComponent implements OnInit {
   readonly enviando = signal(false);
   readonly orcamentoCriado = signal<OrcamentoCriadoResponse | null>(null);
 
-  readonly osOptions = computed<SelectOption[]>(() =>
-    this.osJornadaStore.registros().map(r => ({
-      value: r.osId,
-      label: `OS ${r.osId.slice(0, 8)}...`
-    }))
-  );
+  /** OS conhecidas (atalho local, Sagas e fila), já com placa, modelo e cliente. */
+  readonly osLista = signal<OsEnriquecida[]>([]);
+  readonly carregandoOs = signal(true);
+  readonly resolvendoOs = signal(false);
+  readonly buscaOs = signal('');
+  readonly erroOs = signal<string | null>(null);
+  readonly osSelecionada = signal<OsEnriquecida | null>(null);
+  readonly clienteId = signal('');
+
+  readonly ordemServicoId = computed(() => this.osSelecionada()?.id ?? '');
+  readonly podeEnviar = computed(() => !!this.ordemServicoId() && !!this.clienteId().trim());
+
+  /** `clienteId` vindo da query, usado quando a OS não traz o cliente. */
+  private clienteIdDaRota = '';
+
+  readonly osOptions = computed<SelectOption[]>(() => {
+    const lista = ordenarParaOrcamento(this.osLista());
+    const opcoes = lista.map(opcaoDeOs);
+    const colado = this.buscaOs().trim();
+    if (REGEX_GUID.test(colado) && !lista.some(os => os.id.toLowerCase() === colado.toLowerCase())) {
+      opcoes.unshift({
+        value: colado,
+        label: `Usar OS ${idCurto(colado)}`,
+        descricao: 'Carregar a OS pelo código colado',
+        palavrasChave: colado,
+      });
+    }
+    return opcoes;
+  });
 
   readonly total = computed(() =>
     this.itens().reduce((acc, item) => acc + item.quantidade * item.precoUnitario, 0)
@@ -255,17 +403,20 @@ export class OrcamentoPageComponent implements OnInit {
   ngOnInit(): void {
     const paramId = this.route.snapshot?.paramMap?.get('id');
     const queryOsId = this.route.snapshot?.queryParamMap?.get('ordemServicoId');
-    const queryClienteId = this.route.snapshot?.queryParamMap?.get('clienteId');
-    this.ordemServicoId = paramId || queryOsId || '';
-    this.clienteId = queryClienteId || '';
+    this.clienteIdDaRota = this.route.snapshot?.queryParamMap?.get('clienteId') || '';
+    const preSelecionada = paramId || queryOsId || '';
 
-    // Se a OS já está na jornada, completa clienteId se não fornecido
-    if (this.ordemServicoId) {
-      const reg = this.osJornadaStore.obter(this.ordemServicoId);
-      if (reg?.clienteId && !this.clienteId) {
-        this.clienteId = reg.clienteId;
-      }
-    }
+    this.osConhecidas.carregar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: lista => {
+        this.osLista.set(lista);
+        this.carregandoOs.set(false);
+        if (preSelecionada) this.selecionarOs(preSelecionada);
+      },
+      error: () => {
+        this.carregandoOs.set(false);
+        if (preSelecionada) this.selecionarOs(preSelecionada);
+      },
+    });
 
     this.servicoService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: lista => this.servicos.set(lista),
@@ -278,12 +429,40 @@ export class OrcamentoPageComponent implements OnInit {
     });
   }
 
+  /** Seleciona uma OS da lista; um código fora da lista é carregado pelo `OsConhecidasService`. */
   selecionarOs(osId: string): void {
-    this.ordemServicoId = osId;
-    const reg = this.osJornadaStore.obter(osId);
-    if (reg?.clienteId) {
-      this.clienteId = reg.clienteId;
+    this.erroOs.set(null);
+    this.buscaOs.set('');
+    if (!osId) return;
+
+    const conhecida = this.osLista().find(os => os.id.toLowerCase() === osId.toLowerCase());
+    if (conhecida) {
+      this.aplicarOs(conhecida);
+      return;
     }
+
+    this.resolvendoOs.set(true);
+    this.osConhecidas.resolver(osId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: os => {
+        this.resolvendoOs.set(false);
+        if (!os) {
+          this.erroOs.set(MENSAGEM_OS_NAO_ENCONTRADA);
+          return;
+        }
+        this.osLista.update(lista => [os, ...lista.filter(o => o.id !== os.id)]);
+        this.aplicarOs(os);
+      },
+      error: () => {
+        this.resolvendoOs.set(false);
+        this.erroOs.set(MENSAGEM_OS_NAO_ENCONTRADA);
+      },
+    });
+  }
+
+  private aplicarOs(os: OsEnriquecida): void {
+    this.osSelecionada.set(os);
+    const doAtalho = this.osJornadaStore.obter(os.id)?.clienteId;
+    this.clienteId.set(os.clienteId || this.clienteIdDaRota || doAtalho || '');
   }
 
   adicionarServico(servico: Servico, quantidade = 1): void {
@@ -367,8 +546,8 @@ export class OrcamentoPageComponent implements OnInit {
   }
 
   enviar(): void {
-    const ordemServicoId = this.ordemServicoId.trim();
-    const clienteId = this.clienteId.trim();
+    const ordemServicoId = this.ordemServicoId().trim();
+    const clienteId = this.clienteId().trim();
     if (!ordemServicoId || !clienteId) return;
 
     const noModoItens = this.modo() === 'itens';

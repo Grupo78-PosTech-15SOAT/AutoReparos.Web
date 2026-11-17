@@ -58,6 +58,22 @@ describe('OsCancelamento', () => {
     expect(emitSpy).toHaveBeenCalledWith({ estado: 'Compensando' });
   });
 
+  it('mostra o estado com rótulo pt-BR e usa o botão de perigo sem largura total', () => {
+    const botao = fixture.nativeElement.querySelector('[data-testid="btn-cancelar-os"]') as HTMLButtonElement;
+    expect(botao.classList).toContain('btn-danger');
+    expect(botao.classList).not.toContain('btn-block');
+
+    component.motivo = 'Peça indisponível';
+    component.cancelar();
+    controller
+      .expectOne(API_ENDPOINTS.ORDENS_SERVICO.CANCELAMENTO('os-100'))
+      .flush({ estado: 'CompensacaoFalhou' }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+
+    const statusEl = fixture.nativeElement.querySelector('[role="status"]') as HTMLElement | null;
+    expect(statusEl?.textContent).toContain('Estado: Compensação falhou');
+  });
+
   it.each(['saga_em_andamento', 'cancelamento_indisponivel'] as const)(
     'em 409 %s mostra a mensagem do código do catálogo e mantém a OS sem emitir cancelada',
     codigo => {
