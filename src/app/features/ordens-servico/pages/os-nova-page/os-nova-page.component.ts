@@ -24,8 +24,21 @@ import {
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
 import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
+import { formatarPlaca } from '../../services/os-conhecidas.service';
+import { CpfCnpjPipe } from '../../../../shared/pipes/cpf-cnpj.pipe';
 
 const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
+
+/** Opção de veículo com a placa à frente: `ABC-1D23 · Gol (VW)`. */
+export function opcaoDeVeiculo(v: Veiculo): SelectOption {
+  const placa = formatarPlaca(v.placa);
+  const modelo = v.marca ? `${v.modelo} (${v.marca})` : v.modelo;
+  return {
+    value: v.id!,
+    label: [placa, modelo].filter(Boolean).join(' · '),
+    palavrasChave: [v.placa, placa, v.modelo, v.marca].filter(Boolean).join(' '),
+  };
+}
 
 @Component({
   selector: 'app-os-nova-page',
@@ -54,11 +67,13 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
             <div class="form-section">
               <h3 class="section-heading">1. Cliente</h3>
               <div class="form-group">
-                <label class="form-label">Cliente Cadastrado</label>
+                <label class="form-label" for="os-nova-cliente">Cliente Cadastrado</label>
                 <app-custom-select
                   [options]="clienteOptions"
                   [value]="clienteId"
+                  idGatilho="os-nova-cliente"
                   placeholder="-- Selecione o Cliente --"
+                  placeholderBusca="Nome ou documento"
                   (valueChange)="onClienteSelect($event)"
                 ></app-custom-select>
               </div>
@@ -67,11 +82,13 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
             <div class="form-section" style="margin-top: 1.5rem;">
               <h3 class="section-heading">2. Veículo</h3>
               <div class="form-group">
-                <label class="form-label">Veículo do Cliente</label>
+                <label class="form-label" for="os-nova-veiculo">Veículo do Cliente</label>
                 <app-custom-select
                   [options]="veiculoOptions"
                   [value]="veiculoId"
+                  idGatilho="os-nova-veiculo"
                   placeholder="-- Selecione o Veículo --"
+                  placeholderBusca="Placa, modelo ou marca"
                   (valueChange)="onVeiculoSelect($event)"
                 ></app-custom-select>
               </div>
@@ -115,7 +132,7 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
   styles: [
     `
       .form-section {
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid var(--border-color);
         padding-bottom: 1.5rem;
       }
       .section-heading {
@@ -128,8 +145,8 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
       .draft-badge {
         font-size: 0.75rem;
         color: var(--status-recebida);
-        background: rgba(59, 130, 246, 0.1);
-        border: 1px solid rgba(59, 130, 246, 0.3);
+        background: var(--info-bg);
+        border: 1px solid var(--info);
         padding: 0.3rem 0.75rem;
         border-radius: 999px;
         font-weight: 600;
@@ -196,6 +213,8 @@ export class OsNovaPageComponent implements OnInit {
           this.clienteOptions = this.clientes.map(c => ({
             value: c.id!,
             label: c.nome,
+            descricao: c.documento ? new CpfCnpjPipe().transform(c.documento) : undefined,
+            palavrasChave: c.documento,
           }));
           clientesCarregados = true;
           checarConcluido();
@@ -226,10 +245,7 @@ export class OsNovaPageComponent implements OnInit {
   }
 
   atualizarVeiculoOptions() {
-    this.veiculoOptions = this.veiculosFiltrados.map(v => ({
-      value: v.id!,
-      label: `${v.modelo} (${v.marca})`,
-    }));
+    this.veiculoOptions = this.veiculosFiltrados.map(v => opcaoDeVeiculo(v));
   }
 
   salvarRascunho() {

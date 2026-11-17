@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { InsumoService } from '../../services/insumo.service';
 import { Insumo } from '../../models/insumo.model';
@@ -8,12 +7,13 @@ import { NotificationService } from '../../../../core/ui/notification.service';
 import { AuthService } from '../../../auth/services/auth.service';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { ModalDialogComponent } from '../../../../shared/components/modal-dialog/modal-dialog.component';
+import { MoedaPipe } from '../../../../shared/pipes/moeda.pipe';
 
 @Component({
   selector: 'app-insumos-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormsModule, PageContainerComponent, ModalDialogComponent],
+  imports: [FormsModule, PageContainerComponent, ModalDialogComponent, MoedaPipe],
   template: `
     <app-page-container>
       <div class="page-header">
@@ -40,7 +40,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
               <th style="text-align: center;">Preço Unitário</th>
               <th style="text-align: center;">Saldo Disponível</th>
               <th style="text-align: center;">Saldo Reservado</th>
-              <th>Ações</th>
+              <th class="col-acoes">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -49,11 +49,11 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
                 <td>
                   <div style="font-weight: 600;">{{ item.nome }}</div>
                   @if (item.descricao) {
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">{{ item.descricao }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">{{ item.descricao }}</div>
                   }
                 </td>
                 <td style="text-align: center;">
-                  <span data-testid="preco-insumo">R$ {{ (item.precoUnitario ?? item.valor ?? 0) | number:'1.2-2' }}</span>
+                  <span data-testid="preco-insumo">{{ (item.precoUnitario ?? item.valor ?? 0) | moeda }}</span>
                 </td>
                 <td style="text-align: center;" data-testid="saldo-disponivel">
                   <span>{{ item.quantidadeDisponivel ?? item.saldoDisponivel ?? item.quantidadeEstoque ?? 0 }}</span>
@@ -61,12 +61,12 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
                 <td style="text-align: center;" data-testid="saldo-reservado">
                   <span>{{ item.quantidadeReservada ?? item.saldoReservado ?? 0 }}</span>
                 </td>
-                <td>
+                <td class="col-acoes">
                   @if (canRegistrarEntrada()) {
                     <button
                       type="button"
                       (click)="abrirModalEntrada(item)"
-                      class="btn btn-secondary btn-sm"
+                      class="btn btn-ghost btn-sm"
                       data-testid="btn-registrar-entrada"
                     >
                       + Registrar Entrada
@@ -76,7 +76,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
               </tr>
             } @empty {
               <tr>
-                <td colspan="5" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                <td colspan="5" class="empty-state">
                   Nenhum insumo cadastrado.
                 </td>
               </tr>
@@ -144,20 +144,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
     </app-page-container>
   `,
   styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; }
-    .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .form-group { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; }
-    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
-    .form-control {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      outline: none;
-    }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
   `]
 })
 export class InsumosPageComponent implements OnInit {

@@ -56,6 +56,8 @@ describe('AprovacaoOrcamentoPage', () => {
       fixture.detectChanges();
       const pageContainer = fixture.nativeElement.querySelector('app-page-container');
       expect(pageContainer).toBeTruthy();
+      const aprovar = fixture.nativeElement.querySelector('[data-testid="btn-aprovar-orcamento"]') as HTMLButtonElement;
+      expect(aprovar.className).toContain('btn btn-success');
     });
   });
 
@@ -81,6 +83,7 @@ describe('AprovacaoOrcamentoPage', () => {
     const confirmacao = fixture.nativeElement.querySelector('[data-testid="confirmacao-aprovacao"]').textContent as string;
     expect(confirmacao).toContain('Orçamento Aprovado!');
     expect(confirmacao).toContain('pag-777');
+    expect(fixture.nativeElement.querySelector('[data-testid="pagamento-id"] app-id-badge')).not.toBeNull();
     expect(component.clienteToken()).toBe('jwt-cliente-rs256');
   });
 
