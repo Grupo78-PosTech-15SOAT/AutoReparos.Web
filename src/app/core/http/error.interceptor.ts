@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { NotificationService } from '../ui/notification.service';
 import { STORAGE_TOKEN } from '../tokens/storage.token';
-import { resolverMensagemErro } from './error-catalog';
+import { resolverMensagemErro, extrairCodigoErro, extrairDetalheErro } from './error-catalog';
 import { STATUS_TRATADOS_NA_TELA } from './http-context';
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
@@ -15,7 +15,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
       const isLoginRequest = req.url.toLowerCase().includes('/auth/login');
-      const resolvida = resolverMensagemErro(error.status, error.error?.codigo);
+      const codigo = extrairCodigoErro(error.error);
+      const detalhe = extrairDetalheErro(error.error);
+      const resolvida = resolverMensagemErro(error.status, codigo, detalhe);
 
       if (req.context.get(STATUS_TRATADOS_NA_TELA).includes(error.status)) {
         return throwError(() => error);
@@ -23,7 +25,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
       if (error.status === 401) {
         if (isLoginRequest) {
-          const message = error.error?.message || 'E-mail ou senha incorretos. Verifique suas credenciais.';
+          const message = detalhe || 'E-mail ou senha incorretos. Verifique suas credenciais.';
           notificationService.error('Falha no Login', message);
         } else {
           notificationService.warning(resolvida!.titulo, resolvida!.mensagem);
@@ -32,7 +34,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           router.navigate(['/login']);
         }
       } else if (error.status === 400) {
-        const message = error.error?.message || error.error?.title || 'Requisição inválida. Verifique os dados.';
+        const message = detalhe || error.error?.title || 'Requisição inválida. Verifique os dados.';
         notificationService.error('Erro de Validação (400)', message);
       } else if (resolvida) {
         const notificar = error.status === 404 || error.status === 409 ? notificationService.warning : notificationService.error;

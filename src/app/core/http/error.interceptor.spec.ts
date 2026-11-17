@@ -108,4 +108,16 @@ describe('ErrorInterceptor', () => {
     controller.expectOne(API_ENDPOINTS.ORDENS_SERVICO.BASE).flush({}, { status: 409, statusText: 'x' });
     expect(recebido).toBe(409);
   });
+
+  describe('ErrorInterceptor detalhe', () => {
+    it('extrai erro da AuthLambda como detalhe legível e detalhe de microsserviço', () => {
+      // AuthLambda devolve { erro: "CPF inválido." }
+      falhar(400, { erro: 'CPF inválido.' });
+      expect(notificacao.toasts().some(t => t.message === 'CPF inválido.')).toBe(true);
+
+      // Microsserviço devolve { detalhe: "Veículo com débitos." } em 422 sem codigo
+      falhar(422, { detalhe: 'Veículo com débitos.' });
+      expect(notificacao.toasts().some(t => t.message === 'Veículo com débitos.')).toBe(true);
+    });
+  });
 });
