@@ -30,6 +30,9 @@ export interface OsEnriquecida {
 /** Máximo de consultas simultâneas ao montar a lista de OS conhecidas. */
 export const CONCORRENCIA_CONSULTAS = 6;
 
+/** Máximo de OS conhecidas consultadas (as mais recentes de cada fonte vêm primeiro). */
+export const LIMITE_OS_CONHECIDAS = 50;
+
 /** Falhas de cadastro não viram toast: a tela mostra o id no lugar. */
 const CONTEXTO_SILENCIOSO = () => new HttpContext().set(STATUS_TRATADOS_NA_TELA, [400, 403, 404, 500, 502, 503]);
 
@@ -124,7 +127,10 @@ export class OsConhecidasService {
     );
   }
 
-  /** Ids de OS conhecidos: atalho local, Sagas (Administrador) e fila de execução, sem repetição. */
+  /**
+   * Ids de OS conhecidos: atalho local, Sagas (Administrador) e fila de execução, sem repetição,
+   * limitados a `LIMITE_OS_CONHECIDAS` (uma OS fora da lista é achada colando o código completo).
+   */
   ids(): Observable<string[]> {
     const locais = this.jornada.registros().map(r => r.osId);
     const sagas$ = this.auth.hasRole(['Administrador'])
@@ -137,7 +143,7 @@ export class OsConhecidasService {
     return forkJoin({ sagas: sagas$, fila: fila$ }).pipe(
       map(({ sagas, fila }) => {
         const todos = [...locais, ...sagas.map(s => s.ordemServicoId), ...fila.map(f => f.ordemServicoId ?? '')];
-        return Array.from(new Set(todos.filter(Boolean)));
+        return Array.from(new Set(todos.filter(Boolean))).slice(0, LIMITE_OS_CONHECIDAS);
       })
     );
   }

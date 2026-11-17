@@ -18,5 +18,9 @@ describe('MoedaPipe', () => {
     expect(pipe.transform(null)).toBe('—');
     expect(pipe.transform(undefined)).toBe('—');
     expect(pipe.transform('abc')).toBe('—');
+    expect(pipe.transform('   ')).toBe('—');
+    expect(pipe.transform(true)).toBe('—');
+    expect(pipe.transform({})).toBe('—');
+    expect(pipe.transform(Number.NaN)).toBe('—');
   });
 });

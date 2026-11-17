@@ -9,6 +9,20 @@ describe('formatarDataHora', () => {
     expect(formatarDataHora(antes(30_000), 'relativo', AGORA)).toBe('agora');
   });
 
+  it('relativo: limites exatos de 1 minuto, 1 hora e 24 horas', () => {
+    expect(formatarDataHora(antes(59_999), 'relativo', AGORA)).toBe('agora');
+    expect(formatarDataHora(antes(60_000), 'relativo', AGORA)).toBe('há 1 min');
+    expect(formatarDataHora(antes(3_599_999), 'relativo', AGORA)).toBe('há 59 min');
+    expect(formatarDataHora(antes(3_600_000), 'relativo', AGORA)).toBe('há 1 h');
+    expect(formatarDataHora(antes(86_399_999), 'relativo', AGORA)).toBe('há 23 h');
+    expect(formatarDataHora(antes(86_400_000), 'relativo', AGORA)).toBe('16/11 14:32');
+  });
+
+  it('relativo: até 1 minuto no futuro (relógio adiantado) vira "agora"; além disso, a data', () => {
+    expect(formatarDataHora(antes(-10_000), 'relativo', AGORA)).toBe('agora');
+    expect(formatarDataHora(antes(-60_000), 'relativo', AGORA)).toBe('17/11 14:33');
+  });
+
   it('relativo: menos de 1 hora vira "há N min"', () => {
     expect(formatarDataHora(antes(5 * 60_000), 'relativo', AGORA)).toBe('há 5 min');
     expect(formatarDataHora(antes(59 * 60_000), 'relativo', AGORA)).toBe('há 59 min');

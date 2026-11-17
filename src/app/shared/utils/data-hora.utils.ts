@@ -24,7 +24,7 @@ function dataEHora(data: Date, agora: Date, comAno: boolean): string {
 
 /**
  * Formata data e hora em pt-BR.
- * - `relativo`: "agora" (< 1 min), "há N min" (< 1 h), "há N h" (< 24 h), depois `dd/MM HH:mm`.
+ * - `relativo`: "agora" (< 1 min, ou até 1 min no futuro), "há N min" (< 1 h), "há N h" (< 24 h), depois `dd/MM HH:mm`.
  * - `curto`: `dd/MM HH:mm` (com ano quando for outro ano).
  * - `completo`: `dd/MM/yyyy HH:mm`.
  * Entrada vazia ou inválida devolve "—".
@@ -41,6 +41,8 @@ export function formatarDataHora(
   if (modo === 'curto') return dataEHora(data, agora, false);
 
   const diff = agora.getTime() - data.getTime();
+  // Relógio do servidor um pouco adiantado: menos de 1 minuto no futuro ainda é "agora".
+  if (diff < 0 && diff > -MINUTO) return 'agora';
   if (diff >= 0 && diff < DIA) {
     if (diff < MINUTO) return 'agora';
     if (diff < HORA) return `há ${Math.floor(diff / MINUTO)} min`;

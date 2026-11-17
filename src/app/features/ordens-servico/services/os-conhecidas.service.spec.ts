@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { OsConhecidasService, OsEnriquecida, opcaoDeOs, ordenarParaOrcamento } from './os-conhecidas.service';
+import { LIMITE_OS_CONHECIDAS, OsConhecidasService, OsEnriquecida, opcaoDeOs, ordenarParaOrcamento } from './os-conhecidas.service';
 import { API_ENDPOINTS } from '../../../core/config/api-endpoints';
 import { OsJornadaStore } from '../../../core/store/os-jornada.store';
 import { AuthService } from '../../auth/services/auth.service';
@@ -84,6 +84,19 @@ describe('OsConhecidas', () => {
         clienteNome: 'João da Silva',
         clienteDocumento: '12345678909',
       });
+    });
+
+    it('limita os ids consultados a LIMITE_OS_CONHECIDAS, mantendo os primeiros', () => {
+      let ids: string[] = [];
+      service.ids().subscribe(r => (ids = r));
+      const sagas = Array.from({ length: LIMITE_OS_CONHECIDAS + 10 }, (_, i) => ({ ordemServicoId: `saga-${i}`, estado: 'X' }));
+      http.expectOne(API_ENDPOINTS.SAGAS.BASE).flush(sagas);
+      http.expectOne(r => r.url === API_ENDPOINTS.EXECUCAO.FILA).flush([]);
+      expect(LIMITE_OS_CONHECIDAS).toBe(50);
+      expect(ids).toHaveLength(50);
+      expect(ids[0]).toBe(OS_LOCAL);
+      expect(ids[1]).toBe('saga-0');
+      expect(ids[49]).toBe('saga-48');
     });
 
     it('sem perfil Administrador não consulta as Sagas', () => {

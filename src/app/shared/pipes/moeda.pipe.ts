@@ -4,8 +4,14 @@ const FORMATO_BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency
 
 /** Formata um valor em reais (`R$ 1.234,50`). Valor não numérico vira "—". */
 export function formatarMoeda(valor: unknown): string {
-  if (valor === null || valor === undefined || valor === '') return '—';
-  const numero = typeof valor === 'number' ? valor : Number(valor);
+  let numero: number;
+  if (typeof valor === 'number') {
+    numero = valor;
+  } else if (typeof valor === 'string' && valor.trim() !== '') {
+    numero = Number(valor);
+  } else {
+    return '—';
+  }
   if (!Number.isFinite(numero)) return '—';
   // Intl usa espaço não separável entre "R$" e o número; normaliza para espaço comum.
   return FORMATO_BRL.format(numero).replace(/ /g, ' ');

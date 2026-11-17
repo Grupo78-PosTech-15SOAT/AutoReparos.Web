@@ -25,6 +25,7 @@ import { PageContainerComponent } from '../../../../shared/components/page-conta
 import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
 import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 import { formatarPlaca } from '../../services/os-conhecidas.service';
+import { idCurto } from '../../../../shared/components/id-badge/id-badge.component';
 import { CpfCnpjPipe } from '../../../../shared/pipes/cpf-cnpj.pipe';
 
 const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
@@ -335,7 +336,7 @@ export class OsNovaPageComponent implements OnInit {
           });
           this.notification.success(
             'OS Aberta!',
-            `Ordem de Serviço #${osCriada.id.slice(0, 8)} registrada.`
+            `Ordem de Serviço ${idCurto(osCriada.id)} registrada.`
           );
           this.cdr.markForCheck();
           this.router.navigate(['/ordens-servico', osCriada.id]);
