@@ -23,6 +23,7 @@ import {
 } from '../../../../shared/components/custom-select/custom-select.component';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { STORAGE_TOKEN } from '../../../../core/tokens/storage.token';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 
 const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
 
@@ -121,12 +122,12 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
         font-family: 'Outfit', sans-serif;
         font-size: 1.1rem;
         font-weight: 700;
-        color: #ed145b;
+        color: var(--primary);
         margin-bottom: 1rem;
       }
       .draft-badge {
         font-size: 0.75rem;
-        color: #3b82f6;
+        color: var(--status-recebida);
         background: rgba(59, 130, 246, 0.1);
         border: 1px solid rgba(59, 130, 246, 0.3);
         padding: 0.3rem 0.75rem;
@@ -136,7 +137,7 @@ const DRAFT_STORAGE_KEY = 'autoreparos_draft_nova_os';
       }
       .erro-formulario {
         margin-top: 1rem;
-        color: #f87171;
+        color: var(--primary);
         font-size: 0.9rem;
       }
     `,
@@ -150,6 +151,7 @@ export class OsNovaPageComponent implements OnInit {
   private readonly notification = inject(NotificationService);
   private readonly router = inject(Router);
   private readonly storage = inject(STORAGE_TOKEN);
+  private readonly osJornadaStore = inject(OsJornadaStore);
   private readonly cdr = inject(ChangeDetectorRef);
 
   clienteId = '';
@@ -310,6 +312,11 @@ export class OsNovaPageComponent implements OnInit {
         next: osCriada => {
           this.loading = false;
           this.limparRascunho();
+          this.osJornadaStore.salvar({
+            osId: osCriada.id,
+            clienteId: this.clienteId,
+            veiculoId: this.veiculoId,
+          });
           this.notification.success(
             'OS Aberta!',
             `Ordem de Serviço #${osCriada.id.slice(0, 8)} registrada.`

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -6,13 +6,15 @@ import { ActivatedRoute } from '@angular/router';
 import { PagamentoService } from '../../services/pagamento.service';
 import { CheckoutResponse, ReembolsoResponse } from '../../models/pagamento.model';
 import { AuthService } from '../../../auth/services/auth.service';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
+import { CustomSelectComponent, SelectOption } from '../../../../shared/components/custom-select/custom-select.component';
 
 @Component({
   selector: 'app-pagamento-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormsModule, PageContainerComponent],
+  imports: [DecimalPipe, FormsModule, PageContainerComponent, CustomSelectComponent],
   template: `
     <app-page-container maxWidth="760px">
       <div class="page-header">
@@ -26,6 +28,16 @@ import { PageContainerComponent } from '../../../../shared/components/page-conta
         <h3 class="secao">Checkout</h3>
         <div class="form-group">
           <label class="form-label" for="input-pagamento-id">Código do Pagamento (ID)</label>
+          @if (osOptions().length > 0) {
+            <div style="margin-bottom: 0.5rem;">
+              <app-custom-select
+                [options]="osOptions()"
+                [value]="pagamentoId"
+                (valueChange)="selecionarOs($event)"
+                placeholder="Selecione um pagamento recente..."
+              ></app-custom-select>
+            </div>
+          }
           <input
             id="input-pagamento-id"
             type="text"
@@ -133,10 +145,10 @@ import { PageContainerComponent } from '../../../../shared/components/page-conta
     </app-page-container>
   `,
   styles: [`
-    .secao { font-family: 'Outfit', sans-serif; font-size: 1.05rem; color: #ED145B; margin-bottom: 0.75rem; }
+    .secao { font-family: 'Outfit', sans-serif; font-size: 1.05rem; color: var(--primary); margin-bottom: 0.75rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
     .form-reembolso { display: flex; flex-direction: column; gap: 0.85rem; }
-    .resultado-box { margin-top: 1rem; padding: 1rem; border-radius: 8px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: #F8FAFC; }
+    .resultado-box { margin-top: 1rem; padding: 1rem; border-radius: 8px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: var(--text-main); }
   `]
 })
 export class PagamentoPageComponent implements OnInit {
@@ -144,6 +156,7 @@ export class PagamentoPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly pagamentoService = inject(PagamentoService);
   private readonly auth = inject(AuthService);
+  private readonly osJornadaStore = inject(OsJornadaStore);
 
   pagamentoId = '';
   valorReembolso = 0;
@@ -154,6 +167,21 @@ export class PagamentoPageComponent implements OnInit {
   readonly enviandoReembolso = signal(false);
   readonly checkout = signal<CheckoutResponse | null>(null);
   readonly reembolso = signal<ReembolsoResponse | null>(null);
+
+  readonly osOptions = computed<SelectOption[]>(() =>
+    this.osJornadaStore
+      .registros()
+      .filter(r => r.pagamentoId || r.osId)
+      .map(r => ({
+        value: r.pagamentoId ?? r.osId,
+        label: `OS ${r.osId.slice(0, 8)}...` + (r.pagamentoId ? ` (Pagamento ${r.pagamentoId.slice(0, 8)}...)` : ''),
+      }))
+  );
+
+  selecionarOs(valor: string): void {
+    const reg = this.osJornadaStore.obter(valor) ?? this.osJornadaStore.obterPorPagamento(valor);
+    this.pagamentoId = reg?.pagamentoId ?? valor;
+  }
 
   ngOnInit(): void {
     const paramId = this.route.snapshot?.paramMap?.get('id');

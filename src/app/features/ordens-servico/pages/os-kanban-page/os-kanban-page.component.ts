@@ -8,18 +8,22 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, of } from 'rxjs';
 import { AuthService } from '../../../auth/services/auth.service';
+import { OsJornadaStore } from '../../../../core/store/os-jornada.store';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { StatusBadgeComponent } from '../../../../shared/components/status-badge/status-badge.component';
 import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
+import { AlertBannerComponent } from '../../../../shared/components/alert-banner/alert-banner.component';
 import { STATUS_OS, STATUS_OS_MAP, StatusOS } from '../../../../shared/utils/status-os.utils';
 import {
   ExecucaoResumo,
   KanbanCard,
   KanbanColumn,
+  OsDetalhe,
   SagaAdminResumo,
 } from '../../models/ordem-servico.model';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
@@ -34,6 +38,7 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
     PageContainerComponent,
     StatusBadgeComponent,
     IdBadgeComponent,
+    AlertBannerComponent,
   ],
   template: `
     <app-page-container type="kanban">
@@ -69,6 +74,20 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
 
       @if (erroBusca(); as msg) {
         <p class="erro-busca" role="alert">{{ msg }}</p>
+      }
+
+      @if (acessoExecucaoRestrito()) {
+        <div data-testid="aviso-execucao-restrita" style="margin-bottom: 1rem;">
+          <app-alert-banner tipo="info">
+            Sem acesso à fila de execução: seu perfil não possui permissão para visualizar o andamento operacional na oficina.
+          </app-alert-banner>
+        </div>
+      }
+
+      @if (erroFila(); as msg) {
+        <app-alert-banner tipo="erro" data-testid="aviso-erro-fila" style="margin-bottom: 1rem;">
+          {{ msg }}
+        </app-alert-banner>
       }
 
       @if (carregando()) {
@@ -132,7 +151,7 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
         min-width: 220px;
       }
       .erro-busca {
-        color: #f87171;
+        color: var(--primary);
         margin: 0 0 1rem;
         font-size: 0.9rem;
       }
@@ -141,7 +160,7 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
         margin-bottom: 1rem;
         border-radius: 8px;
         background: rgba(59, 130, 246, 0.1);
-        color: #93c5fd;
+        color: var(--status-recebida);
         font-size: 0.9rem;
       }
       .kanban-wrapper {
@@ -182,7 +201,7 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
       .column-status-code {
         display: block;
         font-size: 0.72rem;
-        color: #71717a;
+        color: var(--text-subtle);
       }
       .column-count {
         background: rgba(255, 255, 255, 0.08);
@@ -216,19 +235,19 @@ import { OrdemServicoService } from '../../services/ordem-servico.service';
       .card-obs {
         margin: 0;
         font-size: 0.82rem;
-        color: #a1a1aa;
+        color: var(--text-muted);
       }
       .card-link {
         font-size: 0.82rem;
         font-weight: 600;
-        color: #ed145b;
+        color: var(--primary);
         text-decoration: none;
       }
       .empty-column {
         text-align: center;
         padding: 2rem 0.75rem;
         font-size: 0.78rem;
-        color: #52525b;
+        color: var(--text-subtle);
         border: 1px dashed rgba(255, 255, 255, 0.06);
         border-radius: 8px;
       }
@@ -239,11 +258,14 @@ export class OsKanbanPageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly osService = inject(OrdemServicoService);
   private readonly auth = inject(AuthService);
+  private readonly osJornadaStore = inject(OsJornadaStore);
 
   codigoBusca = '';
   readonly carregando = signal(false);
   readonly buscandoCodigo = signal(false);
   readonly erroBusca = signal<string | null>(null);
+  readonly acessoExecucaoRestrito = signal(false);
+  readonly erroFila = signal<string | null>(null);
   readonly cartoesPorId = signal<Record<string, KanbanCard>>({});
 
   readonly colunas = computed<KanbanColumn[]>(() => {
@@ -261,16 +283,32 @@ export class OsKanbanPageComponent implements OnInit {
 
   carregarQuadro(): void {
     this.carregando.set(true);
+    this.erroFila.set(null);
+
     const fila$ = this.osService
       .listarFilaExecucao()
-      .pipe(catchError(() => of([] as ExecucaoResumo[])));
+      .pipe(
+        catchError((err: HttpErrorResponse) => {
+          if (err?.status !== 403) {
+            this.erroFila.set('Não foi possível carregar a fila de execução.');
+          }
+          return of({ itens: [] as ExecucaoResumo[], restrito: err?.status === 403 });
+        })
+      );
+
     const sagas$ = this.auth.hasRole(['Administrador'])
       ? this.osService.listarSagasAdmin().pipe(catchError(() => of([] as SagaAdminResumo[])))
       : of([] as SagaAdminResumo[]);
 
-    forkJoin({ fila: fila$, sagas: sagas$ })
+    const idsAtalho = Array.from(new Set(this.osJornadaStore.registros().map(r => r.osId).filter(Boolean)));
+    const atalhos$ = idsAtalho.length > 0
+      ? forkJoin(idsAtalho.map(id => this.osService.obter(id).pipe(catchError(() => of(null)))))
+      : of([] as (OsDetalhe | null)[]);
+
+    forkJoin({ fila: fila$, sagas: sagas$, atalhos: atalhos$ })
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(({ fila, sagas }) => {
+      .subscribe(({ fila, sagas, atalhos }) => {
+        this.acessoExecucaoRestrito.set(!!fila.restrito);
         const atual = { ...this.cartoesPorId() };
 
         for (const saga of sagas) {
@@ -285,7 +323,7 @@ export class OsKanbanPageComponent implements OnInit {
           };
         }
 
-        for (const exec of fila) {
+        for (const exec of fila.itens) {
           const osId = exec.ordemServicoId || exec.id;
           if (!osId) continue;
           atual[osId] = {
@@ -296,6 +334,19 @@ export class OsKanbanPageComponent implements OnInit {
             status: this.mapearStatusParaColuna(exec.status, exec.intervencaoRequerida),
             atualizadaEm: exec.atualizadaEm ?? atual[osId]?.atualizadaEm,
             origem: 'execucao',
+          };
+        }
+
+        for (const os of atalhos) {
+          if (!os) continue;
+          atual[os.id] = {
+            ...atual[os.id],
+            id: os.id,
+            clienteId: os.clienteId ?? atual[os.id]?.clienteId,
+            veiculoId: os.veiculoId ?? atual[os.id]?.veiculoId,
+            observacao: os.observacao ?? atual[os.id]?.observacao,
+            status: this.mapearStatusParaColuna(os.status),
+            origem: 'os',
           };
         }
 
