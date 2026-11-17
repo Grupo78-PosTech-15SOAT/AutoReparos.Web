@@ -92,8 +92,9 @@ jobs:
   deploy:
     needs: [build, test, quality]
     # Push na main: só com build, test e quality verdes. Disparo manual na main com ignorar_quality: aceita o quality
-    # vermelho, mas nunca build ou test vermelhos (igual ao Cadastros, D-60).
-    if: always() && github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.test.result == 'success' && (needs.quality.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.ignorar_quality))
+    # vermelho, mas nunca build ou test vermelhos (igual ao Cadastros, D-60). !cancelled() em vez de always(): um run
+    # cancelado não implanta.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.test.result == 'success' && (needs.quality.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.ignorar_quality)) }}
     runs-on: ubuntu-latest
     environment: production
     permissions:
