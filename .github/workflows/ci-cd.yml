@@ -5,13 +5,20 @@ on:
     branches: [main]
   push:
     branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      ignorar_quality:
+        description: Implantar mesmo com o quality vermelho (uso manual; build e test continuam obrigatórios)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-cd-${{ github.ref }}
-  cancel-in-progress: true
+  # Na main não cancela: um deploy interrompido deixaria a release do Helm presa em pending-upgrade.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -47,7 +54,10 @@ jobs:
 
   quality:
     needs: test
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.base_ref == 'main')
+    # Push ou disparo manual na main e PR para a main. A primeira análise de uma branch no SonarCloud não tem linha
+    # de base de código novo: o quality gate fica NONE e o scanner sai com código 3 (run 43251757645, 12/11); a
+    # análise seguinte da mesma branch já compara com a anterior.
+    if: (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.base_ref == 'main')
     runs-on: ubuntu-latest
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -76,3 +86,74 @@ jobs:
             -Dsonar.qualitygate.wait=true
         env:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
+
+  # Implanta o Web na produção (EKS): só na main, depois de build, test e quality (ou do disparo manual com
+  # ignorar_quality) e no Environment production. Imagem -> ECR autoreparos-web -> Helm com --atomic -> rollout -> GET /.
+  deploy:
+    needs: [build, test, quality]
+    # Push na main: só com build, test e quality verdes. Disparo manual na main com ignorar_quality: aceita o quality
+    # vermelho, mas nunca build ou test vermelhos (igual ao Cadastros, D-60).
+    if: always() && github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.test.result == 'success' && (needs.quality.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.ignorar_quality))
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: deploy-web-production
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      ECR_REPOSITORY: autoreparos-web
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+      - uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
+        with:
+          version: v3.16.4
+      - name: Publicar a imagem no ECR
+        id: imagem
+        run: |
+          set -euo pipefail
+          conta="$(aws sts get-caller-identity --query Account --output text)"
+          REGISTRY="$conta.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+          docker build -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" -f Dockerfile .
+          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "registry=$REGISTRY" >> "$GITHUB_OUTPUT"
+      - name: Conectar ao EKS
+        run: aws eks update-kubeconfig --name '${{ vars.EKS_CLUSTER_NAME }}' --region "$AWS_REGION"
+      - name: Implantar com Helm
+        env:
+          REGISTRY: ${{ steps.imagem.outputs.registry }}
+        run: |
+          set -euo pipefail
+          # O namespace web é da plataforma (stacks/base); a role só edita dentro dele.
+          helm upgrade --install web deploy/helm/web \
+            --namespace web --atomic --wait --timeout 10m \
+            --set-string "image.repository=$REGISTRY/$ECR_REPOSITORY" \
+            --set-string "image.tag=$IMAGE_TAG"
+      - name: Verificar o rollout e o GET /
+        run: |
+          set -euo pipefail
+          kubectl rollout status deployment/autoreparos-web -n web --timeout=5m
+          kubectl port-forward -n web service/autoreparos-web 18080:80 > "$RUNNER_TEMP/port-forward.log" 2>&1 &
+          encaminhamento=$!
+          trap 'kill "$encaminhamento" 2>/dev/null || true' EXIT
+          status=000
+          for tentativa in $(seq 1 15); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/ || true)
+            [ "$status" = "200" ] && break
+            sleep 2
+          done
+          if [ "$status" != "200" ]; then
+            echo "::error::GET / no Service autoreparos-web respondeu $status em vez de 200"
+            cat "$RUNNER_TEMP/port-forward.log" || true
+            exit 1
+          fi
+          echo "GET / respondeu 200"

@@ -1,0 +1,30 @@
+# Valores do release web (namespace web). O job deploy do ci-cd.yml passa image.repository e image.tag.
+replicaCount: 1
+
+image:
+  repository: autoreparos-web
+  tag: latest
+  pullPolicy: Always
+
+service:
+  port: 80
+
+config:
+  # Vazio: o Angular usa URLs relativas atrás do ALB interno e do API Gateway.
+  apiUrl: ""
+  # O collector fica no release autoreparos do pai (namespace autoreparos): nome completo do Service.
+  otelCollectorHost: autoreparos-otel-collector.autoreparos.svc.cluster.local
+
+ingress:
+  className: alb
+  groupName: autoreparos-internal
+  # Menor que o 1000 do Ingress antigo do guarda-chuva: este assume o "/" antes de o pai desligar o subchart (door 1).
+  groupOrder: "999"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi

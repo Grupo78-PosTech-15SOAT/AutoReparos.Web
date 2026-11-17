@@ -1,0 +1,6 @@
+apiVersion: v2
+name: web
+description: Chart do AutoReparos.Web (Angular servido pelo nginx), implantado pelo próprio repositório no namespace web
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
