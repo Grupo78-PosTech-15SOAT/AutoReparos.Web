@@ -30,13 +30,17 @@ export class ServicoService {
   }
 
   criar(servico: Partial<Servico>): Observable<Servico> {
-    const precoBase = Number(servico.precoBase ?? servico.valorTabelado ?? 0);
-    const payload = {
+    const precoUnitario = Number(servico.precoUnitario ?? servico.precoBase ?? servico.valorTabelado ?? 0);
+    const desc = servico.descricao?.trim();
+    const payload: Record<string, unknown> = {
       nome: servico.nome ?? '',
-      descricao: servico.descricao,
-      precoBase,
-      valorTabelado: precoBase,
+      precoUnitario,
+      precoBase: precoUnitario,
+      valorTabelado: precoUnitario,
     };
+    if (desc) {
+      payload['descricao'] = desc;
+    }
     return this.http.post<Servico>(API_ENDPOINTS.SERVICOS.BASE, payload).pipe(
       map(res => normalizarServico(res ?? payload))
     );
@@ -48,10 +52,9 @@ export class ServicoService {
     }
     if (res && typeof res === 'object') {
       const obj = res as Record<string, unknown>;
-      const lista = obj['items'] ?? obj['Items'] ?? obj['itens'] ?? obj['Itens'] ?? obj['data'] ?? obj['Data'];
-      if (Array.isArray(lista)) {
-        return lista;
-      }
+      if (Array.isArray(obj['itens'])) return obj['itens'] as Partial<Servico>[];
+      if (Array.isArray(obj['items'])) return obj['items'] as Partial<Servico>[];
+      if (Array.isArray(obj['dados'])) return obj['dados'] as Partial<Servico>[];
     }
     return [];
   }

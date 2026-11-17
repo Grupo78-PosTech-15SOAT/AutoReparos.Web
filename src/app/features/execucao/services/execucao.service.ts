@@ -3,7 +3,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { API_ENDPOINTS } from '../../../core/config/api-endpoints';
 import { STATUS_TRATADOS_NA_TELA } from '../../../core/http/http-context';
-import { FiltroFilaExecucao, ItemFilaExecucao, TipoEtapaExecucao } from '../models/execucao.model';
+import { FiltroFilaExecucao, ItemFilaExecucao, TipoEtapaExecucao, EtapaCriada } from '../models/execucao.model';
 
 @Injectable({
   providedIn: 'root'
@@ -16,8 +16,9 @@ export class ExecucaoService {
     if (filtro.status?.trim()) {
       params = params.set('status', filtro.status.trim());
     }
-    if (filtro.mecanicoId?.trim()) {
-      params = params.set('mecanicoId', filtro.mecanicoId.trim());
+    const mecanico = filtro.mecanico?.trim();
+    if (mecanico) {
+      params = params.set('mecanico', mecanico);
     }
 
     return this.http.get<unknown>(API_ENDPOINTS.EXECUCAO.FILA, { params }).pipe(
@@ -25,11 +26,14 @@ export class ExecucaoService {
     );
   }
 
-  registrarEtapa(execucaoId: string, etapa: TipoEtapaExecucao, descricao?: string): Observable<ItemFilaExecucao> {
+  registrarEtapa(execucaoId: string, tipo: TipoEtapaExecucao, descricao?: string): Observable<EtapaCriada> {
     const context = new HttpContext().set(STATUS_TRATADOS_NA_TELA, [409, 422]);
-    return this.http.post<ItemFilaExecucao>(
+    const fallback = tipo === 'Diagnostico' ? 'Diagnóstico técnico realizado' : 'Reparo executado';
+    const descFinal = descricao?.trim() || fallback;
+
+    return this.http.post<EtapaCriada>(
       API_ENDPOINTS.EXECUCAO.ETAPAS(execucaoId),
-      { etapa, tipo: etapa, ...(descricao ? { descricao } : {}) },
+      { tipo, descricao: descFinal },
       { context }
     );
   }
@@ -67,7 +71,7 @@ export class ExecucaoService {
     }
     if (res && typeof res === 'object') {
       const obj = res as Record<string, unknown>;
-      const lista = obj['itens'] ?? obj['Itens'] ?? obj['items'] ?? obj['Items'] ?? obj['data'];
+      const lista = obj['itens'] ?? obj['items'] ?? obj['dados'] ?? obj['data'];
       if (Array.isArray(lista)) {
         return lista as ItemFilaExecucao[];
       }

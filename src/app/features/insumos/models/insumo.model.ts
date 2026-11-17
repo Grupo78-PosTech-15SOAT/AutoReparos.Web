@@ -5,6 +5,9 @@ export interface Insumo {
   descricao?: string;
   precoUnitario?: number;
   valor?: number;
+  quantidadeDisponivel?: number;
+  quantidadeReservada?: number;
+  quantidadeInicial?: number;
   saldoDisponivel?: number;
   quantidadeEstoque?: number;
   saldoReservado?: number;
@@ -12,20 +15,21 @@ export interface Insumo {
 
 export interface RegistrarEntradaInsumoRequest {
   quantidade: number;
-  motivo: string;
 }
 
-export function normalizarInsumo(raw: Partial<Insumo>): Insumo {
-  const preco = Number(raw.precoUnitario ?? raw.valor ?? 0);
-  const saldoDisponivel = Number(raw.saldoDisponivel ?? raw.quantidadeEstoque ?? 0);
-  const saldoReservado = Number(raw.saldoReservado ?? 0);
+export function normalizarInsumo(raw: any): Insumo {
+  const preco = Number(raw?.precoUnitario ?? raw?.valor ?? 0);
+  const qtdDisp = Number(raw?.quantidadeDisponivel ?? raw?.saldoDisponivel ?? raw?.quantidadeEstoque ?? 0);
+  const qtdRes = Number(raw?.quantidadeReservada ?? raw?.saldoReservado ?? 0);
   return {
     ...raw,
-    nome: raw.nome ?? '',
+    nome: raw?.nome ?? '',
     precoUnitario: preco,
     valor: preco,
-    saldoDisponivel,
-    quantidadeEstoque: saldoDisponivel,
-    saldoReservado,
+    quantidadeDisponivel: qtdDisp,
+    quantidadeReservada: qtdRes,
+    saldoDisponivel: qtdDisp,
+    quantidadeEstoque: qtdDisp,
+    saldoReservado: qtdRes,
   };
 }
