@@ -63,6 +63,5 @@ export const API_ENDPOINTS = {
   USUARIOS: {
     BASE: `${V1}/usuarios`,
     BY_ID: (id: string) => `${V1}/usuarios/${id}`,
-    ROLE: (id: string) => `${V1}/usuarios/${id}/role`,
   },
 };

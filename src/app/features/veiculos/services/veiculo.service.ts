@@ -25,12 +25,25 @@ export class VeiculoService {
     return this.http.get<Veiculo>(API_ENDPOINTS.VEICULOS.BY_ID(id));
   }
 
+  getByClienteId(clienteId: string): Observable<Veiculo[]> {
+    const params = new HttpParams().set('clienteId', clienteId).set('pageSize', '100');
+    return this.http.get<any>(API_ENDPOINTS.VEICULOS.BASE, { params }).pipe(
+      map(res => this.normalizePagedResult(res, 1, 100).items)
+    );
+  }
+
   criar(veiculo: Veiculo): Observable<Veiculo> {
     return this.http.post<Veiculo>(API_ENDPOINTS.VEICULOS.BASE, veiculo);
   }
 
   atualizar(id: string, veiculo: Veiculo): Observable<Veiculo> {
-    return this.http.put<Veiculo>(API_ENDPOINTS.VEICULOS.BY_ID(id), veiculo);
+    const payload = {
+      marca: veiculo.marca,
+      modelo: veiculo.modelo,
+      anoFabricacao: Number(veiculo.anoFabricacao),
+      anoModelo: Number(veiculo.anoModelo)
+    };
+    return this.http.put<Veiculo>(API_ENDPOINTS.VEICULOS.BY_ID(id), payload);
   }
 
   excluir(id: string): Observable<void> {
