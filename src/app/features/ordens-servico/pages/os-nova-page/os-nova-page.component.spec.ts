@@ -53,6 +53,19 @@ describe('OsNovaPage', () => {
 
   afterEach(() => controller.verify());
 
+  describe('OsNovaPage opcoes de veiculo', () => {
+    it('mostra a placa formatada à frente do modelo e liga os rótulos aos seletores', () => {
+      expect(component.veiculoOptions.map(o => o.label)).toEqual(['ABC-1D23 · Ka (Ford)', 'XYZ-9K88 · Uno (Fiat)']);
+      expect(component.veiculoOptions[0].palavrasChave).toContain('ABC1D23');
+      expect(component.clienteOptions[0].descricao).toBe('123.456.789-01');
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('label[for="os-nova-veiculo"]')).not.toBeNull();
+      expect(el.querySelector('#os-nova-veiculo')?.tagName).toBe('BUTTON');
+      expect(el.querySelector('#os-nova-cliente')?.tagName).toBe('BUTTON');
+    });
+  });
+
   it('seleciona cliente e veículo, envia POST /api/v1/ordens-servico e abre o detalhe da OS criada', () => {
     component.onClienteSelect('cli-1');
     expect(component.veiculoId).toBe('vei-1');

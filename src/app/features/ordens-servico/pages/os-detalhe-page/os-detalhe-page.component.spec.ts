@@ -51,7 +51,7 @@ describe('OsDetalhePage', () => {
     TestBed.resetTestingModule();
   });
 
-  it('mostra status, observação, histórico, estado da execução e ações de orçamento, pagamento e cancelamento', () => {
+  it('mostra status, observação, histórico, estado da execução e ações de orçamento, pagamento e cancelamento', async () => {
     fixture = TestBed.createComponent(OsDetalhePageComponent);
     fixture.componentRef.setInput('id', 'os-11112222');
     component = fixture.componentInstance;
@@ -98,12 +98,12 @@ describe('OsDetalhePage', () => {
     reqVei.flush({ id: 'vei-77776666', modelo: 'Civic', placa: 'ABC1D23' });
 
     fixture.detectChanges();
+    await fixture.whenStable();
 
     const texto = fixture.nativeElement.textContent as string;
     expect(texto).toContain('Em Execução');
-    expect(texto).toContain('Vazamento de fluido');
+    expect((fixture.nativeElement.querySelector('#observacao-detalhe') as HTMLTextAreaElement).value).toBe('Vazamento de fluido');
     expect(texto).toContain('Recebida');
-    expect(texto).toContain('EmExecucao');
     expect(texto).toContain('Carlos Cliente');
     expect(texto).toContain('Civic');
     expect(texto).toContain('Montar orçamento');
@@ -197,7 +197,66 @@ describe('OsDetalhePage', () => {
     fixture.detectChanges();
 
     const texto = fixture.nativeElement.textContent as string;
-    expect(texto).toContain('cli-fail');
-    expect(texto).toContain('vei-fail');
+    expect(texto).toContain('#cli-fail');
+    expect(texto).toContain('#vei-fail');
+    const cliente = fixture.nativeElement.querySelector('[data-testid="detalhe-cliente"] app-id-badge') as HTMLElement;
+    expect(cliente.querySelector('[title]')?.getAttribute('title')).toBe('cli-fail-1234');
+  });
+
+  describe('OsDetalhe navegacao', () => {
+    function abrirComExecucao(statusExecucao: string): HTMLElement {
+      fixture = TestBed.createComponent(OsDetalhePageComponent);
+      fixture.componentRef.setInput('id', 'os-11112222');
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+
+      controller.expectOne(API_ENDPOINTS.ORDENS_SERVICO.BY_ID('os-11112222')).flush({
+        id: 'os-11112222',
+        clienteId: 'cli-99998888',
+        veiculoId: 'vei-77776666',
+        observacao: 'Vazamento de fluido',
+        status: 'EmExecucao',
+        historico: [{ status: 'Recebida', registradoEm: '2026-11-16T10:00:00Z' }],
+      });
+      controller.expectOne(req => req.url === API_ENDPOINTS.EXECUCAO.FILA).flush({
+        itens: [{ id: 'exec-1', ordemServicoId: 'os-11112222', status: statusExecucao, mecanicoId: 'mec-12345678-aaaa' }],
+      });
+      controller.expectOne(API_ENDPOINTS.SAGAS.BY_ID('os-11112222')).flush(null, { status: 404, statusText: 'Not Found' });
+      controller.expectOne(API_ENDPOINTS.CLIENTES.BY_ID('cli-99998888')).flush(null, { status: 404, statusText: 'Not Found' });
+      controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-77776666')).flush(null, { status: 404, statusText: 'Not Found' });
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('mostra o link "Ordens de Serviço" para /ordens-servico e nenhum "Kanban"', () => {
+      const nativo = abrirComExecucao('EmExecucao');
+      const voltar = nativo.querySelector('[data-testid="link-voltar-os"]') as HTMLAnchorElement;
+      expect(voltar.textContent?.trim()).toBe('← Ordens de Serviço');
+      expect(voltar.getAttribute('href')).toBe('/ordens-servico');
+      expect(voltar.classList).toContain('btn-ghost');
+      expect(nativo.textContent).not.toContain('Kanban');
+    });
+
+    it.each([
+      ['Fila', 'Na fila'],
+      ['EmExecucao', 'Em Execução'],
+      ['Falhou', 'Falhou'],
+      ['Concluida', 'Concluída'],
+    ])('mostra o estado da execução %s com o rótulo pt-BR "%s"', (status, rotulo) => {
+      const nativo = abrirComExecucao(status);
+      const estado = nativo.querySelector('[data-testid="estado-execucao"] app-status-badge') as HTMLElement;
+      expect(estado.textContent?.trim()).toBe(rotulo);
+    });
+
+    it('não repete a observação no subtítulo e destaca só "Montar orçamento" como primário', () => {
+      const nativo = abrirComExecucao('EmExecucao');
+      expect(nativo.querySelector('.page-header')?.textContent).not.toContain('Vazamento de fluido');
+      const primarios = Array.from(nativo.querySelectorAll('.acoes-fluxo .btn-primary')).map(a => a.textContent?.trim());
+      expect(primarios).toEqual(['Montar orçamento']);
+      const salvar = nativo.querySelector('[data-testid="btn-salvar-observacao"]') as HTMLButtonElement;
+      expect(salvar.classList).not.toContain('btn-block');
+      expect(salvar.classList).not.toContain('btn-primary');
+      expect(nativo.querySelector('[data-testid="historico-os"]')).toBeTruthy();
+    });
   });
 });

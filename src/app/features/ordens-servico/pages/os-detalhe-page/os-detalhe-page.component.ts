@@ -9,7 +9,6 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
@@ -26,6 +25,7 @@ import { PageContainerComponent } from '../../../../shared/components/page-conta
 import { IdBadgeComponent } from '../../../../shared/components/id-badge/id-badge.component';
 import { DocumentoBadgeComponent } from '../../../../shared/components/documento-badge/documento-badge.component';
 import { PlacaBadgeComponent } from '../../../../shared/components/placa-badge/placa-badge.component';
+import { DataHoraComponent } from '../../../../shared/components/data-hora/data-hora.component';
 import { OsCancelamentoComponent } from '../../components/os-cancelamento/os-cancelamento.component';
 
 type Carga<T> =
@@ -40,7 +40,6 @@ type Carga<T> =
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DatePipe,
     FormsModule,
     RouterLink,
     StatusBadgeComponent,
@@ -48,6 +47,7 @@ type Carga<T> =
     IdBadgeComponent,
     DocumentoBadgeComponent,
     PlacaBadgeComponent,
+    DataHoraComponent,
     OsCancelamentoComponent,
   ],
   template: `
@@ -55,39 +55,35 @@ type Carga<T> =
       @if (carregando()) {
         <div class="card-panel aviso" role="status">Carregando OS...</div>
       } @else if (os(); as os) {
+        <a routerLink="/ordens-servico" class="btn btn-ghost btn-sm voltar" data-testid="link-voltar-os">← Ordens de Serviço</a>
         <div class="page-header">
           <div>
             <div class="cabecalho">
-              <app-id-badge [text]="'#' + os.id.substring(0, 8)" size="lg"></app-id-badge>
+              <app-id-badge [text]="os.id" size="lg"></app-id-badge>
               <app-status-badge [status]="os.status"></app-status-badge>
             </div>
             <h1 class="page-title">Ordem de Serviço</h1>
-            <p class="page-subtitle" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-              <span>
+            <p class="page-subtitle identificacao">
+              <span class="item-identificacao" data-testid="detalhe-cliente">
                 Cliente:
                 @if (cliente(); as c) {
                   <strong>{{ c.nome }}</strong>
                   <app-documento-badge [documento]="c.documento" size="sm"></app-documento-badge>
                 } @else {
-                  <span>{{ os.clienteId.substring(0, 8) }}</span>
+                  <app-id-badge [text]="os.clienteId" size="sm"></app-id-badge>
                 }
               </span>
-              <span>|</span>
-              <span>
+              <span class="item-identificacao" data-testid="detalhe-veiculo">
                 Veículo:
                 @if (veiculo(); as v) {
                   <strong>{{ v.modelo }}</strong>
                   <app-placa-badge [placa]="v.placa" size="sm"></app-placa-badge>
                 } @else {
-                  <span>{{ os.veiculoId.substring(0, 8) }}</span>
+                  <app-id-badge [text]="os.veiculoId" size="sm"></app-id-badge>
                 }
               </span>
             </p>
-            @if (os.observacao) {
-              <p class="page-subtitle">Observação: {{ os.observacao }}</p>
-            }
           </div>
-          <a routerLink="/ordens-servico/fila" class="btn btn-secondary">Voltar ao Kanban</a>
         </div>
 
         <div class="grade">
@@ -106,8 +102,9 @@ type Carga<T> =
               ></textarea>
               <button
                 type="submit"
-                class="btn btn-primary"
+                class="btn btn-secondary btn-salvar"
                 [disabled]="salvandoObservacao()"
+                data-testid="btn-salvar-observacao"
               >
                 {{ salvandoObservacao() ? 'Salvando...' : 'Salvar observação' }}
               </button>
@@ -119,11 +116,11 @@ type Carga<T> =
 
           <section class="card-panel" aria-label="Histórico">
             <h3 class="secao">Histórico</h3>
-            <ul class="lista">
+            <ul class="lista historico" data-testid="historico-os">
               @for (h of os.historico; track $index) {
                 <li class="linha">
                   <app-status-badge [status]="h.status" size="sm"></app-status-badge>
-                  <span class="data">{{ h.em | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  <app-data-hora class="data" [valor]="h.em ?? h.registradoEm" modo="completo"></app-data-hora>
                 </li>
               } @empty {
                 <li class="linha">Sem movimentações registradas.</li>
@@ -190,14 +187,14 @@ type Carga<T> =
               }
               @case ('ok') {
                 @if (execucaoOk(); as e) {
-                  <div class="linha">
+                  <div class="linha" data-testid="estado-execucao">
                     <span>Estado</span>
-                    <strong>{{ e.status }}</strong>
+                    <app-status-badge [status]="e.status" size="sm"></app-status-badge>
                   </div>
                   @if (e.mecanicoId) {
                     <div class="linha">
                       <span>Mecânico</span>
-                      <strong>{{ e.mecanicoId.substring(0, 8) }}</strong>
+                      <app-id-badge [text]="e.mecanicoId" size="sm"></app-id-badge>
                     </div>
                   }
                 }
@@ -216,6 +213,27 @@ type Carga<T> =
   `,
   styles: [
     `
+      .voltar {
+        margin-bottom: 0.75rem;
+      }
+      .identificacao {
+        display: flex;
+        gap: 1.25rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .item-identificacao {
+        display: inline-flex;
+        gap: 0.4rem;
+        align-items: center;
+      }
+      .btn-salvar {
+        align-self: flex-start;
+      }
+      .historico {
+        max-height: 320px;
+        overflow-y: auto;
+      }
       .cabecalho {
         display: flex;
         align-items: center;
@@ -228,7 +246,7 @@ type Carga<T> =
         gap: 1.25rem;
       }
       .secao {
-        font-family: 'Outfit', sans-serif;
+        font-family: var(--font-display);
         font-size: 1.05rem;
         color: var(--primary);
         margin-bottom: 0.75rem;
@@ -254,7 +272,7 @@ type Carga<T> =
         justify-content: space-between;
         align-items: center;
         padding: 0.45rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        border-bottom: 1px solid var(--border-color);
       }
       .data {
         color: var(--text-muted);
@@ -265,7 +283,7 @@ type Carga<T> =
         padding: 0.5rem 0;
       }
       .aviso-ok {
-        color: var(--status-finalizada, #10b981);
+        color: var(--success);
         font-size: 0.85rem;
         margin: 0;
       }

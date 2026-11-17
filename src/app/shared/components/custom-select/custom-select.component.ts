@@ -1,37 +1,73 @@
 import {
-  Component,
-  HostListener,
-  ElementRef,
-  inject,
   ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  HostListener,
+  computed,
+  effect,
+  inject,
   input,
   output,
   signal,
-  computed
+  viewChild,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { DOCUMENT } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 export interface SelectOption {
   value: string;
   label: string;
+  /** Segunda linha, mais discreta (ex.: cliente e estado). */
+  descricao?: string;
+  /** Termos extras que entram na busca (ex.: id completo, placa sem máscara). */
+  palavrasChave?: string;
 }
+
+/** Minúsculas e sem acentos. */
+export function normalizarBusca(texto: string): string {
+  return (texto ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Só letras e dígitos, para que "abc1d23" ache "ABC-1D23". */
+function compactar(texto: string): string {
+  return normalizarBusca(texto).replace(/[^a-z0-9]/g, '');
+}
+
+/** A opção casa com o termo pelo rótulo, pela descrição ou pelas palavras-chave. */
+export function opcaoCasaComBusca(opcao: SelectOption, termo: string): boolean {
+  const normalizado = normalizarBusca(termo);
+  if (!normalizado) return true;
+  const alvo = [opcao.label, opcao.descricao ?? '', opcao.palavrasChave ?? ''].join(' ');
+  if (normalizarBusca(alvo).includes(normalizado)) return true;
+  const compacto = compactar(termo);
+  return compacto.length > 0 && compactar(alvo).includes(compacto);
+}
+
+const ALTURA_MAX_PAINEL = 320;
+const MARGEM_PAINEL = 6;
 
 @Component({
   selector: 'app-custom-select',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="cs-wrapper" [class.cs-open]="isOpen()" [class.cs-loading]="loading()" [class.cs-disabled]="disabled()" [class.cs-drop-up]="dropUp()">
-      <!-- Trigger -->
+    <div class="cs-wrapper" [class.cs-open]="isOpen()" [class.cs-loading]="loading()" [class.cs-disabled]="disabled()">
       <button
+        #gatilho
         type="button"
         class="cs-trigger"
         (click)="toggle()"
         [disabled]="disabled() || loading()"
+        [attr.id]="idGatilho() || null"
         [attr.aria-expanded]="isOpen()"
-        [attr.aria-label]="placeholder()"
+        aria-haspopup="listbox"
+        [attr.aria-label]="idGatilho() ? null : placeholder()"
       >
         @if (loading()) {
           <span class="cs-spinner">
@@ -52,11 +88,10 @@ export interface SelectOption {
         }
       </button>
 
-      <!-- Dropdown Panel -->
       @if (isOpen() && !loading()) {
-        <div class="cs-dropdown fade-in-down">
-          <!-- Search (when many options) -->
-          @if (searchable() && options().length > 6) {
+        <!-- O painel é movido para document.body ao abrir (escapa de cards, modais e drawers). -->
+        <div #painel class="cs-dropdown" [class.cs-para-cima]="paraCima()" data-testid="cs-painel" role="listbox">
+          @if (mostrarBusca()) {
             <div class="cs-search-wrapper">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -65,39 +100,50 @@ export interface SelectOption {
                 #searchInput
                 type="text"
                 class="cs-search"
-                placeholder="Filtrar..."
+                [placeholder]="placeholderBusca()"
                 [ngModel]="searchTerm()"
-                (ngModelChange)="searchTerm.set($event)"
-                (click)="$event.stopPropagation()"
+                (ngModelChange)="mudarBusca($event)"
+                (keydown.enter)="selecionarPrimeira($event)"
+                aria-label="Buscar opções"
+                data-testid="cs-busca"
               />
             </div>
           }
 
           <div class="cs-list">
-            <!-- Placeholder option -->
-            <div
-              class="cs-option cs-option-placeholder"
-              [class.cs-selected]="!value()"
-              (click)="select('', '')"
-            >
-              {{ placeholder() }}
-            </div>
+            @if (mostrarOpcaoVazia()) {
+              <div
+                class="cs-option cs-option-placeholder"
+                [class.cs-selected]="!value()"
+                (click)="select('')"
+              >
+                {{ placeholder() }}
+              </div>
+            }
 
             @for (opt of filteredOptions(); track opt.value) {
               <div
                 class="cs-option"
+                role="option"
+                [attr.aria-selected]="opt.value === value()"
                 [class.cs-selected]="opt.value === value()"
-                (click)="select(opt.value, opt.label)"
+                (click)="select(opt.value)"
+                data-testid="cs-opcao"
               >
                 @if (opt.value === value()) {
                   <svg class="cs-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 }
-                <span>{{ opt.label }}</span>
+                <span class="cs-option-textos">
+                  <span class="cs-option-label">{{ opt.label }}</span>
+                  @if (opt.descricao) {
+                    <span class="cs-option-descricao">{{ opt.descricao }}</span>
+                  }
+                </span>
               </div>
             } @empty {
-              <div class="cs-empty">Nenhuma opção encontrada</div>
+              <div class="cs-empty">{{ textoVazio() }}</div>
             }
           </div>
         </div>
@@ -112,31 +158,32 @@ export interface SelectOption {
 
     .cs-trigger {
       width: 100%;
+      min-height: var(--control-h, 2.75rem);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
-      background: rgba(18, 18, 21, 0.6);
+      background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      padding: 0.75rem 1rem;
+      border-radius: var(--radius-sm, 8px);
+      padding: 0.6rem 0.9rem;
       color: var(--text-main);
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       font-family: var(--font-body);
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
       text-align: left;
     }
 
     .cs-trigger:hover:not(:disabled) {
-      border-color: var(--border-focus);
-      background: rgba(28, 28, 33, 0.9);
+      border-color: rgba(255, 255, 255, 0.2);
     }
 
-    .cs-open .cs-trigger {
+    .cs-open .cs-trigger,
+    .cs-trigger:focus-visible {
+      outline: none;
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px var(--border-focus);
-      background: rgba(28, 28, 33, 0.95);
+      box-shadow: 0 0 0 3px var(--primary-subtle);
     }
 
     .cs-trigger:disabled {
@@ -157,7 +204,7 @@ export interface SelectOption {
 
     .cs-arrow {
       color: var(--text-subtle);
-      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: transform 0.2s ease;
       flex-shrink: 0;
       line-height: 0;
     }
@@ -168,7 +215,7 @@ export interface SelectOption {
     }
 
     .cs-spinner svg {
-      animation: spin 0.8s linear infinite;
+      animation: cs-spin 0.8s linear infinite;
       color: var(--primary);
     }
 
@@ -178,57 +225,40 @@ export interface SelectOption {
       flex: 1;
     }
 
-    @keyframes spin {
+    @keyframes cs-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
 
-    /* Dropdown */
+    /* Painel (vive em document.body, posição calculada pelo componente) */
     .cs-dropdown {
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      right: 0;
+      position: fixed;
+      z-index: 3000;
+      display: flex;
+      flex-direction: column;
+      max-height: 320px;
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: 10px;
       box-shadow: var(--shadow-lg);
-      z-index: 9999;
       overflow: hidden;
+      font-family: var(--font-body);
+      animation: cs-entrar 0.14s ease-out;
     }
 
-    @keyframes fadeInDown {
-      from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
+    @keyframes cs-entrar {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(8px) scale(0.98); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    .fade-in-down {
-      animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    
-    .cs-drop-up .cs-dropdown {
-      top: auto;
-      bottom: calc(100% + 6px);
-      box-shadow: var(--shadow-lg);
-    }
-    
-    .cs-drop-up .fade-in-down {
-      animation: fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    /* Search */
     .cs-search-wrapper {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.6rem 0.85rem;
+      padding: 0.55rem 0.85rem;
       border-bottom: 1px solid var(--border-color);
       color: var(--text-subtle);
+      flex-shrink: 0;
     }
 
     .cs-search {
@@ -243,36 +273,47 @@ export interface SelectOption {
 
     .cs-search::placeholder { color: var(--text-subtle); }
 
-    /* List */
     .cs-list {
-      max-height: 240px;
       overflow-y: auto;
+      overscroll-behavior: contain;
       scrollbar-width: thin;
-      scrollbar-color: #334155 transparent;
+      scrollbar-color: #3F3F46 transparent;
     }
 
-    .cs-list::-webkit-scrollbar { width: 4px; }
-    .cs-list::-webkit-scrollbar-track { background: transparent; }
-    .cs-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
-    /* Option */
     .cs-option {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.7rem 1rem;
+      padding: 0.55rem 0.9rem;
       color: var(--text-muted);
-      font-size: 0.9rem;
+      font-size: 0.875rem;
       cursor: pointer;
-      transition: background 0.15s ease, color 0.15s ease;
-      border-bottom: 1px solid var(--border-color);
+      transition: background 0.12s ease, color 0.12s ease;
     }
-
-    .cs-option:last-child { border-bottom: none; }
 
     .cs-option:hover {
       background: var(--bg-surface-hover);
       color: var(--text-main);
+    }
+
+    .cs-option-textos {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .cs-option-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cs-option-descricao {
+      font-size: 0.75rem;
+      color: var(--text-subtle);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .cs-option-placeholder {
@@ -282,7 +323,7 @@ export interface SelectOption {
 
     .cs-option.cs-selected {
       background: var(--primary-subtle);
-      color: var(--primary);
+      color: var(--text-main);
       font-weight: 600;
     }
 
@@ -292,10 +333,10 @@ export interface SelectOption {
     }
 
     .cs-empty {
-      padding: 1.25rem;
+      padding: 1.1rem;
       text-align: center;
       color: var(--text-subtle);
-      font-size: 0.875rem;
+      font-size: 0.85rem;
     }
   `]
 })
@@ -303,27 +344,74 @@ export class CustomSelectComponent {
   options = input<SelectOption[]>([]);
   value = input<string>('');
   placeholder = input<string>('-- Selecione --');
+  placeholderBusca = input<string>('Filtrar...');
   loading = input<boolean>(false);
   disabled = input<boolean>(false);
   searchable = input<boolean>(true);
+  /** Mostra a busca com qualquer número de opções (por padrão só com mais de 6). */
+  buscaSempre = input<boolean>(false);
+  /** Mostra a opção vazia (placeholder) no topo da lista. */
+  permitirVazio = input<boolean>(true);
+  textoVazio = input<string>('Nenhuma opção encontrada');
   dropUp = input<boolean>(false);
+  /** Id do botão gatilho, para ligar o `<label for>`. */
+  idGatilho = input<string>('');
 
   valueChange = output<string>();
+  buscaMudou = output<string>();
 
   isOpen = signal(false);
   searchTerm = signal('');
+  paraCima = signal(false);
 
   selectedLabel = computed(() => {
     const found = this.options().find(o => o.value === this.value());
     return found ? found.label : '';
   });
 
+  mostrarBusca = computed(() => this.searchable() && (this.buscaSempre() || this.options().length > 6));
+
+  mostrarOpcaoVazia = computed(() => this.permitirVazio() && !normalizarBusca(this.searchTerm()));
+
   filteredOptions = computed(() => {
-    const term = this.searchTerm().toLowerCase();
-    return this.options().filter(o => o.label.toLowerCase().includes(term));
+    const termo = this.searchTerm();
+    return this.options().filter(o => opcaoCasaComBusca(o, termo));
   });
 
-  private readonly el = inject(ElementRef);
+  private readonly el = inject(ElementRef<HTMLElement>);
+  private readonly document = inject(DOCUMENT);
+  private readonly gatilho = viewChild<ElementRef<HTMLButtonElement>>('gatilho');
+  private readonly painel = viewChild<ElementRef<HTMLElement>>('painel');
+  private readonly busca = viewChild<ElementRef<HTMLInputElement>>('searchInput');
+  private painelAnexado: HTMLElement | null = null;
+
+  private readonly aoRolar = (event: Event) => {
+    if (!this.isOpen()) return;
+    const alvo = event.target as Node | null;
+    if (alvo && this.painelAnexado?.contains(alvo)) return;
+    this.isOpen.set(false);
+  };
+
+  constructor() {
+    effect(() => {
+      const painel = this.painel()?.nativeElement ?? null;
+      if (painel && painel !== this.painelAnexado) {
+        this.document.body.appendChild(painel);
+        this.painelAnexado = painel;
+        this.posicionar();
+        this.busca()?.nativeElement.focus();
+      } else if (!painel) {
+        this.painelAnexado = null;
+      }
+    });
+
+    this.document.addEventListener('scroll', this.aoRolar, true);
+    inject(DestroyRef).onDestroy(() => {
+      this.document.removeEventListener('scroll', this.aoRolar, true);
+      this.painelAnexado?.remove();
+      this.painelAnexado = null;
+    });
+  }
 
   toggle() {
     if (this.disabled() || this.loading()) return;
@@ -333,14 +421,57 @@ export class CustomSelectComponent {
     }
   }
 
-  select(val: string, label: string) {
+  mudarBusca(termo: string) {
+    this.searchTerm.set(termo ?? '');
+    this.buscaMudou.emit(termo ?? '');
+  }
+
+  selecionarPrimeira(event: Event) {
+    event.preventDefault();
+    const primeira = this.filteredOptions()[0];
+    if (primeira) this.select(primeira.value);
+  }
+
+  select(val: string) {
     this.isOpen.set(false);
     this.valueChange.emit(val);
   }
 
+  /** Posiciona o painel (fixo) sob o gatilho, ou acima quando não cabe embaixo. */
+  posicionar() {
+    const painel = this.painelAnexado;
+    const gatilho = this.gatilho()?.nativeElement;
+    if (!painel || !gatilho) return;
+    const rect = gatilho.getBoundingClientRect();
+    const alturaJanela = this.document.defaultView?.innerHeight ?? 0;
+    const espacoAbaixo = alturaJanela - rect.bottom;
+    const abrirParaCima = this.dropUp() || (espacoAbaixo < ALTURA_MAX_PAINEL && rect.top > espacoAbaixo);
+    this.paraCima.set(abrirParaCima);
+
+    painel.style.left = `${Math.max(rect.left, 8)}px`;
+    painel.style.width = `${Math.max(rect.width, 240)}px`;
+    if (abrirParaCima) {
+      painel.style.top = '';
+      painel.style.bottom = `${alturaJanela - rect.top + MARGEM_PAINEL}px`;
+      painel.style.maxHeight = `${Math.min(ALTURA_MAX_PAINEL, Math.max(rect.top - 16, 160))}px`;
+    } else {
+      painel.style.bottom = '';
+      painel.style.top = `${rect.bottom + MARGEM_PAINEL}px`;
+      painel.style.maxHeight = `${Math.min(ALTURA_MAX_PAINEL, Math.max(espacoAbaixo - 16, 160))}px`;
+    }
+  }
+
+  @HostListener('window:resize')
+  onResize() {
+    if (this.isOpen()) this.posicionar();
+  }
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
-    if (!this.el.nativeElement.contains(event.target)) {
+    const alvo = event.target as Node | null;
+    const dentroDoGatilho = !!alvo && this.el.nativeElement.contains(alvo);
+    const dentroDoPainel = !!alvo && !!this.painelAnexado?.contains(alvo);
+    if (!dentroDoGatilho && !dentroDoPainel) {
       this.isOpen.set(false);
     }
   }

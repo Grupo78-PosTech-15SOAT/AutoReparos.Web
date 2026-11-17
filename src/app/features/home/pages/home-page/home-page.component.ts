@@ -35,12 +35,12 @@ import { AuthService } from '../../../auth/services/auth.service';
                  <span class="user-greeting-name">{{ user.nome }} <small class="user-role-badge">({{ user.role }})</small></span>
                </div>
                <div class="user-actions">
-                 <a routerLink="/ordens-servico/fila" class="btn btn-primary btn-md">
+                 <a routerLink="/ordens-servico" class="btn btn-primary">
                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
-                   Quadro Kanban
+                   Ordens de Serviço
                  </a>
                  @if (auth.hasRole(['Administrador'])) {
-                   <a routerLink="/sagas" class="btn btn-secondary btn-md">
+                   <a routerLink="/sagas" class="btn btn-secondary">
                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                      Console de Sagas
                    </a>
@@ -87,17 +87,17 @@ import { AuthService } from '../../../auth/services/auth.service';
              </a>
            </div>
 
-           <!-- Card 3: Fila Kanban -->
+           <!-- Card 3: Ordens de Serviço -->
            <div class="module-card">
              <div class="card-top-line orange-line"></div>
              <div class="card-header">
                <div class="card-icon icon-orange">
                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
                </div>
-               <h3 class="module-title">Fila Kanban da Oficina</h3>
+               <h3 class="module-title">Ordens de Serviço</h3>
              </div>
-             <a routerLink="/ordens-servico/fila" class="module-link">
-               <span>Abrir Quadro Kanban</span>
+             <a routerLink="/ordens-servico" class="module-link">
+               <span>Abrir Ordens de Serviço</span>
                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
              </a>
            </div>
@@ -234,16 +234,6 @@ import { AuthService } from '../../../auth/services/auth.service';
       margin-top: 1.75rem;
       flex-wrap: wrap;
     }
-    .btn-lg {
-      padding: 0.75rem 1.5rem;
-      font-size: 0.95rem;
-      border-radius: 10px;
-    }
-    .btn-md {
-      padding: 0.6rem 1.1rem;
-      font-size: 0.88rem;
-      border-radius: 8px;
-    }
 
     .welcome-user-box {
       display: flex;
@@ -311,11 +301,6 @@ import { AuthService } from '../../../auth/services/auth.service';
     .pin-icon {
       font-size: 1.2rem;
     }
-    .section-subtitle {
-      color: var(--text-subtle);
-      font-size: 0.88rem;
-      margin-top: 0.2rem;
-    }
 
     .modules-grid {
       display: grid;
@@ -347,7 +332,6 @@ import { AuthService } from '../../../auth/services/auth.service';
       height: 3px;
       opacity: 0.8;
     }
-    .blue-line { background: #38BDF8; }
     .purple-line { background: #A78BFA; }
     .orange-line { background: #FB923C; }
     .pink-line { background: var(--primary); }
@@ -369,7 +353,6 @@ import { AuthService } from '../../../auth/services/auth.service';
       justify-content: center;
       flex-shrink: 0;
     }
-    .icon-blue { background: rgba(56, 189, 248, 0.12); color: #38BDF8; }
     .icon-purple { background: rgba(167, 139, 250, 0.12); color: #A78BFA; }
     .icon-orange { background: rgba(251, 146, 60, 0.14); color: #FB923C; }
     .icon-pink { background: var(--primary-subtle); color: var(--primary); }
@@ -382,13 +365,6 @@ import { AuthService } from '../../../auth/services/auth.service';
       font-weight: 700;
       color: var(--text-main);
       line-height: 1.25;
-    }
-    .module-desc {
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      line-height: 1.5;
-      margin-bottom: 1.25rem;
-      flex-grow: 1;
     }
     .module-link {
       color: var(--primary);

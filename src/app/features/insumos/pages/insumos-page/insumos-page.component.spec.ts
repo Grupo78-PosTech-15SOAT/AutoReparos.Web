@@ -71,7 +71,7 @@ describe('InsumosPage', () => {
 
       expect(fixture.nativeElement.querySelector('[data-testid="saldo-disponivel"]').textContent.trim()).toBe('12');
       expect(fixture.nativeElement.querySelector('[data-testid="saldo-reservado"]').textContent.trim()).toBe('3');
-      expect(fixture.nativeElement.querySelector('[data-testid="preco-insumo"]').textContent).toMatch(/45[,.]50/);
+      expect(fixture.nativeElement.querySelector('[data-testid="preco-insumo"]').textContent.trim()).toBe('R$ 45,50');
 
       // Cadastro de novo insumo com descrição vazia
       component.formInsumo = {

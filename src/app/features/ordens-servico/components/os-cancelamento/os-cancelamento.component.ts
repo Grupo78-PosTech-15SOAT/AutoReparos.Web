@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { OrdemServicoService } from '../../services/ordem-servico.service';
 import { CancelamentoResposta } from '../../models/ordem-servico.model';
 import { MENSAGENS_POR_STATUS, mensagemDoCodigo } from '../../../../core/http/error-catalog';
+import { getStatusOsInfo } from '../../../../shared/utils/status-os.utils';
 
 @Component({
   selector: 'app-os-cancelamento',
@@ -25,12 +26,12 @@ import { MENSAGENS_POR_STATUS, mensagemDoCodigo } from '../../../../core/http/er
         placeholder="Informe o motivo..."
       ></textarea>
 
-      <button type="button" class="btn btn-danger" (click)="cancelar()" [disabled]="enviando() || !motivo.trim()">
+      <button type="button" class="btn btn-danger btn-cancelar" data-testid="btn-cancelar-os" (click)="cancelar()" [disabled]="enviando() || !motivo.trim()">
         {{ enviando() ? 'Cancelando...' : 'Cancelar OS' }}
       </button>
 
       @if (estado(); as texto) {
-        <p class="resultado ok" role="status">Cancelamento aceito. Estado: {{ texto }}</p>
+        <p class="resultado ok" role="status">Cancelamento aceito. Estado: {{ rotuloEstado(texto) }}</p>
       }
       @if (erro(); as mensagem) {
         <p class="resultado erro" role="alert">{{ mensagem }}</p>
@@ -39,10 +40,11 @@ import { MENSAGENS_POR_STATUS, mensagemDoCodigo } from '../../../../core/http/er
   `,
   styles: [`
     .cancelamento { display: flex; flex-direction: column; gap: 0.75rem; }
-    .titulo { font-family: 'Outfit', sans-serif; font-size: 1.05rem; color: #ED145B; }
+    .titulo { font-family: var(--font-display); font-size: 1.05rem; color: var(--danger); margin: 0; }
+    .btn-cancelar { align-self: flex-start; }
     .resultado { font-size: 0.9rem; margin: 0; }
-    .ok { color: #10B981; }
-    .erro { color: #F87171; }
+    .ok { color: var(--success); }
+    .erro { color: var(--danger); }
   `]
 })
 export class OsCancelamentoComponent {
@@ -57,6 +59,11 @@ export class OsCancelamentoComponent {
   readonly enviando = signal(false);
   readonly estado = signal<string | null>(null);
   readonly erro = signal<string | null>(null);
+
+  /** Rótulo pt-BR do estado devolvido (ex.: `CompensacaoFalhou` → "Compensação falhou"). */
+  rotuloEstado(estado: string): string {
+    return getStatusOsInfo(estado).label;
+  }
 
   cancelar() {
     const motivo = this.motivo.trim();

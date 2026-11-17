@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ServicoService } from '../../services/servico.service';
 import { Servico } from '../../models/servico.model';
@@ -8,12 +7,13 @@ import { NotificationService } from '../../../../core/ui/notification.service';
 import { AuthService } from '../../../auth/services/auth.service';
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { ModalDialogComponent } from '../../../../shared/components/modal-dialog/modal-dialog.component';
+import { MoedaPipe } from '../../../../shared/pipes/moeda.pipe';
 
 @Component({
   selector: 'app-servicos-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, FormsModule, PageContainerComponent, ModalDialogComponent],
+  imports: [FormsModule, PageContainerComponent, ModalDialogComponent, MoedaPipe],
   template: `
     <app-page-container>
       <div class="page-header">
@@ -46,16 +46,16 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
                 <td>
                   <div style="font-weight: 600;">{{ s.nome }}</div>
                   @if (s.descricao) {
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">{{ s.descricao }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">{{ s.descricao }}</div>
                   }
                 </td>
                 <td style="text-align: center;">
-                  <span data-testid="preco-servico">R$ {{ (s.precoUnitario ?? s.precoBase ?? s.valorTabelado ?? 0) | number:'1.2-2' }}</span>
+                  <span data-testid="preco-servico">{{ (s.precoUnitario ?? s.precoBase ?? s.valorTabelado ?? 0) | moeda }}</span>
                 </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="2" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                <td colspan="2" class="empty-state">
                   Nenhum serviço cadastrado.
                 </td>
               </tr>
@@ -95,20 +95,6 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
       </app-modal-dialog>
     </app-page-container>
   `,
-  styles: [`
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; }
-    .form-group { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; }
-    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
-    .form-control {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      outline: none;
-    }
-  `]
 })
 export class ServicosPageComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);

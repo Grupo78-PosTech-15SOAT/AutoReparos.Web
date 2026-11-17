@@ -52,7 +52,7 @@ export interface CheckoutResponse {
                 name="orcamentoId"
                 required
                 class="form-control"
-                placeholder="UUID do orçamento"
+                placeholder="Código recebido da oficina"
               />
             </div>
 
@@ -93,8 +93,7 @@ export interface CheckoutResponse {
                 type="submit"
                 data-testid="btn-aprovar-orcamento"
                 [disabled]="enviando() || !orcamentoId.trim() || !cpf.trim() || !email.trim()"
-                class="btn btn-success btn-lg"
-                style="width: 100%;"
+                class="btn btn-success btn-lg btn-block"
               >
                 {{ enviando() ? 'Aprovando...' : '✓ Aprovar Orçamento' }}
               </button>
@@ -131,8 +130,9 @@ export interface CheckoutResponse {
 
                   @if (urlCheckout()) {
                     <div class="checkout-link-box" data-testid="url-checkout">
-                      <a [href]="urlCheckout()" target="_blank" rel="noopener noreferrer" class="checkout-link">
-                        Abrir link de pagamento Mercado Pago &rarr;
+                      <a [href]="urlCheckout()" [title]="urlCheckout()" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
+                        Abrir link de pagamento Mercado Pago
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                       </a>
                     </div>
                   }
@@ -150,36 +150,18 @@ export interface CheckoutResponse {
       border: 1px solid var(--border-pink);
       border-radius: var(--radius-lg);
       padding: 2.5rem;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      box-shadow: var(--shadow-xl);
+    }
+    @media (max-width: 640px) {
+      .approval-card { padding: 1.5rem 1.25rem; }
     }
     .brand-header { text-align: center; margin-bottom: 1.75rem; }
-    .card-title { font-family: 'Outfit', sans-serif; font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; }
+    .card-title { font-family: var(--font-display); font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; }
     .card-subtitle { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem; }
-    .form-aprovacao { display: flex; flex-direction: column; gap: 1rem; }
-    .form-group { display: flex; flex-direction: column; gap: 0.375rem; }
-    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
-    .form-control {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      font-size: 0.95rem;
-      outline: none;
-    }
-    .form-control:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 2px var(--border-pink);
-    }
+    .form-aprovacao { display: flex; flex-direction: column; gap: 0.25rem; }
     .decision-buttons { display: flex; gap: 1rem; margin-top: 0.5rem; }
-    .btn-lg { padding: 0.85rem 1.25rem; font-size: 0.95rem; border-radius: var(--radius-sm); cursor: pointer; border: none; font-weight: 600; }
-    .btn-success { background: var(--accent-green); color: var(--text-main); }
-    .btn-success:hover:not(:disabled) { opacity: 0.9; }
-    .btn-primary { background: var(--primary); color: var(--text-main); }
-    .btn-primary:hover:not(:disabled) { opacity: 0.9; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .erro-msg { color: var(--accent-red); font-size: 0.9rem; margin: 0.5rem 0 0; }
     .success-box { text-align: center; padding: 1.5rem 1rem; color: var(--text-main); }
+    .success-box h2 { color: var(--success); }
     .pagamento-info {
       display: inline-flex;
       align-items: center;
@@ -197,14 +179,7 @@ export interface CheckoutResponse {
       align-items: center;
       gap: 0.75rem;
     }
-    .checkout-link-box {
-      margin-top: 0.5rem;
-    }
-    .checkout-link {
-      color: var(--accent-cyan);
-      font-weight: 600;
-      text-decoration: underline;
-    }
+    .checkout-link-box { margin-top: 0.5rem; }
   `]
 })
 export class AprovacaoOrcamentoPageComponent implements OnInit {

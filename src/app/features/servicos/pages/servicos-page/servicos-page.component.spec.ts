@@ -68,7 +68,7 @@ describe('ServicosPage', () => {
       fixture.detectChanges();
 
       const precoEl = fixture.nativeElement.querySelector('[data-testid="preco-servico"]');
-      expect(precoEl.textContent).toMatch(/150[,.]00/);
+      expect(precoEl.textContent.trim()).toBe('R$ 150,00');
 
       // Teste de criação com descrição vazia (deve omitir descricao do payload)
       component.formServico = {

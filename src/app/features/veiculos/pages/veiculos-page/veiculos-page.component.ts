@@ -12,6 +12,7 @@ import { CustomSelectComponent, SelectOption } from '../../../../shared/componen
 import { PageContainerComponent } from '../../../../shared/components/page-container/page-container.component';
 import { PlacaBadgeComponent } from '../../../../shared/components/placa-badge/placa-badge.component';
 import { ModalDialogComponent } from '../../../../shared/components/modal-dialog/modal-dialog.component';
+import { CpfCnpjPipe } from '../../../../shared/pipes/cpf-cnpj.pipe';
 
 @Component({
   selector: 'app-veiculos-page',
@@ -35,7 +36,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
             Veículos
           </h1>
         </div>
-        <button (click)="abrirModalNovo()" class="btn btn-primary">
+        <button type="button" (click)="abrirModalNovo()" class="btn btn-primary">
           + Veículo
         </button>
       </div>
@@ -55,7 +56,7 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
               <th>Modelo / Marca</th>
               <th>Ano Fab / Mod</th>
               <th>Proprietário</th>
-              <th>Ações</th>
+              <th class="col-acoes">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -65,20 +66,24 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
                   <app-placa-badge [placa]="v.placa"></app-placa-badge>
                 </td>
                 <td style="font-weight: 600;">
-                  {{ v.modelo }} <span style="font-weight: 400; color: var(--text-muted);">({{ v.marca }})</span>
+                  {{ v.modelo }} <span class="text-muted" style="font-weight: 400;">({{ v.marca }})</span>
                 </td>
                 <td>{{ v.anoFabricacao }} / {{ v.anoModelo }}</td>
                 <td>{{ getClienteNome(v.clienteId) }}</td>
-                <td>
-                  <div style="display: flex; gap: 0.5rem;">
-                    <button (click)="editar(v)" class="btn btn-secondary btn-sm" title="Editar Veículo">✏️ Editar</button>
-                    <button (click)="excluir(v.id!)" class="btn btn-danger btn-sm" title="Excluir Veículo">🗑️</button>
+                <td class="col-acoes">
+                  <div class="acoes-linha">
+                    <button type="button" (click)="editar(v)" class="btn btn-ghost btn-icon btn-sm" [attr.aria-label]="'Editar ' + (v.placa || v.modelo)" [title]="'Editar ' + (v.placa || v.modelo)">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    </button>
+                    <button type="button" (click)="excluir(v.id!)" class="btn btn-ghost btn-danger btn-icon btn-sm" [attr.aria-label]="'Excluir ' + (v.placa || v.modelo)" [title]="'Excluir ' + (v.placa || v.modelo)">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </button>
                   </div>
                 </td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="5" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">
+                <td colspan="5" class="empty-state">
                   Nenhum veículo cadastrado.
                 </td>
               </tr>
@@ -108,12 +113,14 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
       >
         <form (ngSubmit)="salvar()">
           <div class="form-group">
-            <label class="form-label">Cliente Proprietário</label>
+            <label class="form-label" for="vei-cliente">Cliente Proprietário</label>
             <app-custom-select
               [options]="clienteOptions"
               [value]="formVeiculo.clienteId || ''"
               [disabled]="!!editandoId"
+              idGatilho="vei-cliente"
               placeholder="Selecione o proprietário"
+              placeholderBusca="Nome ou documento"
               [loading]="loadingClientes"
               (valueChange)="formVeiculo.clienteId = $event"
             ></app-custom-select>
@@ -121,23 +128,23 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
 
           <div class="grid-2">
             <div class="form-group">
-              <label class="form-label">Marca</label>
-              <input type="text" [(ngModel)]="formVeiculo.marca" name="marca" required placeholder="Ex: Chevrolet" class="form-control" />
+              <label class="form-label" for="vei-marca">Marca</label>
+              <input type="text" [(ngModel)]="formVeiculo.marca" id="vei-marca" name="marca" required placeholder="Ex: Chevrolet" class="form-control" />
             </div>
 
             <div class="form-group">
-              <label class="form-label">Modelo</label>
-              <input type="text" [(ngModel)]="formVeiculo.modelo" name="modelo" required placeholder="Ex: Onix" class="form-control" />
+              <label class="form-label" for="vei-modelo">Modelo</label>
+              <input type="text" [(ngModel)]="formVeiculo.modelo" id="vei-modelo" name="modelo" required placeholder="Ex: Onix" class="form-control" />
             </div>
           </div>
 
           <div class="grid-2">
             <div class="form-group">
-              <label class="form-label">Placa</label>
+              <label class="form-label" for="vei-placa">Placa</label>
               <input
                 type="text"
                 [(ngModel)]="formVeiculo.placa"
-                name="placa"
+                id="vei-placa" name="placa"
                 appMask="placa"
                 required
                 [disabled]="!!editandoId"
@@ -147,11 +154,11 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
             </div>
 
             <div class="form-group">
-              <label class="form-label">Chassi (17 caracteres)</label>
+              <label class="form-label" for="vei-chassi">Chassi (17 caracteres)</label>
               <input
                 type="text"
                 [(ngModel)]="formVeiculo.chassi"
-                name="chassi"
+                id="vei-chassi" name="chassi"
                 maxlength="17"
                 required
                 [disabled]="!!editandoId"
@@ -163,11 +170,11 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
 
           <div class="grid-2">
             <div class="form-group">
-              <label class="form-label">Renavam (11 dígitos)</label>
+              <label class="form-label" for="vei-renavam">Renavam (11 dígitos)</label>
               <input
                 type="text"
                 [(ngModel)]="formVeiculo.renavam"
-                name="renavam"
+                id="vei-renavam" name="renavam"
                 maxlength="11"
                 required
                 [disabled]="!!editandoId"
@@ -177,14 +184,14 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
             </div>
 
             <div class="form-group">
-              <label class="form-label">Ano Fabricação</label>
-              <input type="number" [(ngModel)]="formVeiculo.anoFabricacao" name="anoFabricacao" required placeholder="Ex: 2022" class="form-control" />
+              <label class="form-label" for="vei-ano-fab">Ano Fabricação</label>
+              <input type="number" [(ngModel)]="formVeiculo.anoFabricacao" id="vei-ano-fab" name="anoFabricacao" required placeholder="Ex: 2022" class="form-control" />
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">Ano Modelo</label>
-            <input type="number" [(ngModel)]="formVeiculo.anoModelo" name="anoModelo" required placeholder="Ex: 2023" class="form-control" />
+            <label class="form-label" for="vei-ano-mod">Ano Modelo</label>
+            <input type="number" [(ngModel)]="formVeiculo.anoModelo" id="vei-ano-mod" name="anoModelo" required placeholder="Ex: 2023" class="form-control" />
           </div>
 
           <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
@@ -196,28 +203,8 @@ import { ModalDialogComponent } from '../../../../shared/components/modal-dialog
     </app-page-container>
   `,
   styles: [`
-    .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .page-title { font-size: 1.75rem; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 0.5rem; }
-    .form-group { display: flex; flex-direction: column; gap: 0.375rem; margin-bottom: 1rem; }
-    .form-label { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
-    .form-control {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem 1rem;
-      color: var(--text-main);
-      font-size: 0.95rem;
-      outline: none;
-    }
-    .form-control:focus {
-      border-color: var(--primary);
-    }
-    .form-control:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .page-title { display: flex; align-items: center; gap: 0.5rem; }
   `]
 })
 export class VeiculosPageComponent implements OnInit {
@@ -250,6 +237,7 @@ export class VeiculosPageComponent implements OnInit {
   private readonly clienteService = inject(ClienteService);
   private readonly notification = inject(NotificationService);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly cpfCnpj = new CpfCnpjPipe();
 
   ngOnInit() {
     this.carregar();
@@ -276,7 +264,9 @@ export class VeiculosPageComponent implements OnInit {
         this.clientes = res.items || [];
         this.clienteOptions = this.clientes.map(c => ({
           value: c.id!,
-          label: `${c.nome} (${c.documento})`
+          label: c.nome,
+          descricao: this.cpfCnpj.transform(c.documento),
+          palavrasChave: c.documento
         }));
         this.loadingClientes = false;
         this.cdr.detectChanges();

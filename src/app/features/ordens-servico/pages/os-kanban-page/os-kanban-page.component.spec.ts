@@ -52,6 +52,80 @@ describe('OsKanbanPage', () => {
     TestBed.resetTestingModule();
   });
 
+  /** Responde 404 às consultas de veículo e cliente pendentes (o cartão cai no id da OS). */
+  function responderCadastros(): void {
+    controller
+      .match(r => r.url.includes('/veiculos/') || r.url.includes('/clientes/'))
+      .forEach(r => r.flush(null, { status: 404, statusText: 'Not Found' }));
+  }
+
+  describe('OsKanban cards', () => {
+    const OS_A = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const OS_B = 'bbbbbbbb-2222-4222-8222-222222222222';
+
+    it('tem o título "Ordens de Serviço" e cada card mostra placa, modelo, cliente e o link "Detalhes" para /ordens-servico/<id>', () => {
+      auth.currentUser.set({ email: 'm@x.com', nome: 'Mec', nomeCompleto: 'Mec', role: 'Mecanico' });
+      fixture = TestBed.createComponent(OsKanbanPageComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+
+      const atualizada = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush({
+        itens: [
+          { id: 'exec-1', ordemServicoId: OS_A, clienteId: 'cli-1', veiculoId: 'vei-1', status: 'EmExecucao', atualizadaEm: atualizada },
+          { id: 'exec-2', ordemServicoId: OS_B, clienteId: 'cli-1', veiculoId: 'vei-2', status: 'Concluida' },
+        ],
+      });
+      controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-1')).flush({
+        id: 'vei-1', placa: 'abc1d23', modelo: 'Gol', marca: 'Volkswagen', anoFabricacao: 2020, anoModelo: 2021, clienteId: 'cli-1',
+      });
+      controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-2')).flush(null, { status: 500, statusText: 'Erro' });
+      controller.expectOne(API_ENDPOINTS.CLIENTES.BY_ID('cli-1')).flush({
+        id: 'cli-1', nome: 'João da Silva', email: 'j@x.com', telefone: '1', documento: '1', tipoDocumento: 'CPF',
+      });
+      fixture.detectChanges();
+
+      const nativo = fixture.nativeElement as HTMLElement;
+      expect(nativo.querySelector('h1')?.textContent?.trim()).toBe('Ordens de Serviço');
+      expect(nativo.querySelector('.page-subtitle')?.textContent?.trim()).toBe('Quadro por etapa');
+      expect(nativo.textContent).not.toContain('Kanban');
+      expect(nativo.querySelector('.column-status-code')).toBeNull();
+      const atualizar = nativo.querySelector('[data-testid="btn-atualizar-quadro"]') as HTMLButtonElement;
+      expect(atualizar.getAttribute('aria-label')).toBe('Atualizar quadro');
+
+      const cardA = nativo.querySelector('[data-status="EmExecucao"] [data-testid="kanban-card"]') as HTMLElement;
+      expect(cardA.querySelector('app-placa-badge')?.textContent?.trim()).toBe('ABC-1D23');
+      expect(cardA.querySelector('[data-testid="card-modelo"]')?.textContent?.trim()).toBe('Gol');
+      expect(cardA.querySelector('[data-testid="card-cliente"]')?.textContent?.trim()).toBe('João da Silva');
+      expect(cardA.querySelector('app-id-badge')?.textContent).toContain('#aaaaaaaa');
+      expect(cardA.querySelector('time')?.textContent?.trim()).toBe('há 3 h');
+      const linkA = cardA.querySelector('[data-testid="card-detalhes"]') as HTMLAnchorElement;
+      expect(linkA.textContent?.trim()).toBe('Detalhes ›');
+      expect(linkA.getAttribute('href')).toBe(`/ordens-servico/${OS_A}`);
+
+      const cardB = nativo.querySelector('[data-status="Concluida"] [data-testid="kanban-card"]') as HTMLElement;
+      expect(cardB.querySelector('app-placa-badge')).toBeNull();
+      expect(cardB.querySelector('app-id-badge')?.textContent).toContain('#bbbbbbbb');
+      expect((cardB.querySelector('[data-testid="card-detalhes"]') as HTMLAnchorElement).getAttribute('href')).toBe(`/ordens-servico/${OS_B}`);
+    });
+
+    it('não repete a consulta do veículo ao atualizar o quadro', () => {
+      auth.currentUser.set({ email: 'm@x.com', nome: 'Mec', nomeCompleto: 'Mec', role: 'Mecanico' });
+      fixture = TestBed.createComponent(OsKanbanPageComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+      const fila = { itens: [{ id: 'exec-1', ordemServicoId: OS_A, veiculoId: 'vei-1', status: 'EmExecucao' }] };
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush(fila);
+      controller.expectOne(API_ENDPOINTS.VEICULOS.BY_ID('vei-1')).flush({ id: 'vei-1', placa: 'ABC1D23', modelo: 'Gol', marca: 'VW' });
+
+      (fixture.nativeElement.querySelector('[data-testid="btn-atualizar-quadro"]') as HTMLButtonElement).click();
+      controller.expectOne(API_ENDPOINTS.EXECUCAO.FILA).flush(fila);
+      controller.expectNone(API_ENDPOINTS.VEICULOS.BY_ID('vei-1'));
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('app-placa-badge')?.textContent?.trim()).toBe('ABC-1D23');
+    });
+  });
+
   it('mostra as 7 colunas de status reais da OS, indicador de carregamento e estado vazio por coluna', () => {
     auth.currentUser.set({ email: 'm@x.com', nome: 'Mec', nomeCompleto: 'Mec', role: 'Mecanico' });
     fixture = TestBed.createComponent(OsKanbanPageComponent);
@@ -119,6 +193,7 @@ describe('OsKanbanPage', () => {
       status: 'Recebida',
       historico: [],
     });
+    responderCadastros();
     fixture.detectChanges();
 
     const porStatus = Object.fromEntries(component.colunas().map(c => [c.status, c.cards.map(k => k.id)]));
@@ -213,6 +288,7 @@ describe('OsKanbanPage', () => {
       observacao: 'Troca de pastilhas',
       historico: [],
     });
+    responderCadastros();
     fixture.detectChanges();
 
     const porStatus = Object.fromEntries(component.colunas().map(c => [c.status, c.cards.map(k => k.id)]));
