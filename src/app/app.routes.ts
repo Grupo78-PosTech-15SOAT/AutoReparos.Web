@@ -96,10 +96,6 @@ export const routes: Routes = [
     data: { roles: ['Administrador'] }
   },
   {
-    path: 'consulta-publica',
-    loadComponent: () => import('./features/portal-publico/pages/consulta-publica-page/consulta-publica-page.component').then(m => m.ConsultaPublicaPageComponent)
-  },
-  {
     path: 'aprovar-orcamento',
     loadComponent: () => import('./features/portal-publico/pages/aprovacao-orcamento-page/aprovacao-orcamento-page.component').then(m => m.AprovacaoOrcamentoPageComponent)
   },
